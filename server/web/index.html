@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CallLog Control · Administración</title>
+  <link rel="stylesheet" href="/panel.css"><script src="/panel.js" defer></script>
+</head>
+<body>
+  <header><a class="brand" href="/">↗ <span>CallLog Control<small>ADMINISTRACIÓN DE EQUIPOS</small></span></a><button id="logout" hidden>Salir</button></header>
+  <main>
+    <section id="login" class="login card">
+      <span class="eyebrow">ACCESO AL SERVIDOR</span><h1>El historial de tu flota.</h1>
+      <p>Consulta llamadas, exporta los registros y solicita una actualización desde un solo lugar.</p>
+      <form id="login-form"><label for="admin-key">Credencial de administrador</label><input id="admin-key" type="password" required autocomplete="off" spellcheck="false" placeholder="Pega la clave de CALLLOG_ADMIN_TOKEN"><button class="primary" type="submit">Entrar al panel</button></form>
+      <p class="note">La clave está en <code>.env.wifi</code> en la Mac. La credencial del teléfono no permite administrar el servidor. La sesión se mantiene hasta salir o recargar esta página.</p>
+    </section>
+    <div id="workspace" hidden>
+      <div class="intro"><div><span class="eyebrow">VISTA GENERAL</span><h1>Actividad de tus equipos</h1><p>Registros recibidos por el servidor, con su equipo de origen.</p></div><button id="refresh">Actualizar vista</button></div>
+      <div class="metrics"><section class="card"><span>Equipos registrados</span><strong id="device-count">0</strong></section><section class="card"><span>Llamadas recibidas</span><strong id="call-count">0</strong></section><section class="card"><span>Solicitudes pendientes</span><strong id="request-count">0</strong></section></div>
+      <section class="card"><div class="section-head"><div><h2>Equipos</h2><p>Solicitar sincronización deja una petición pendiente hasta que la app contacte al servidor.</p></div></div>
+        <div class="table-wrap"><table><thead><tr><th>Equipo</th><th>Llamadas</th><th>Último contacto</th><th>Última sincronización</th><th>Solicitud</th><th>Acciones</th></tr></thead><tbody id="devices"></tbody></table></div>
+        <p class="note">Para responder en segundos, activa Control remoto en la app y permite batería sin restricciones. Funciona con notificación permanente y mayor consumo. Sin ese modo, el contacto periódico puede tardar 15 minutos o más. El equipo debe poder acceder al servidor por Wi‑Fi.</p>
+      </section>
+      <section class="card"><div class="section-head"><div><h2>Historial de llamadas</h2><p id="result-summary">Cargando…</p></div><div class="actions"><label for="device-filter" class="sr-only">Filtrar por equipo</label><select id="device-filter"><option value="">Todos los equipos</option></select><button id="export-selected">CSV de la vista</button><button id="export-all" class="primary">CSV conjunto</button></div></div>
+        <div class="table-wrap"><table><thead><tr><th>Equipo</th><th>Número</th><th>Tipo</th><th>Inicio</th><th>Duración</th></tr></thead><tbody id="calls"></tbody></table></div>
+        <div class="pagination"><button id="previous">Anterior</button><span id="page-info"></span><button id="next">Siguiente</button></div>
+      </section>
+      <p class="note">Los equipos con prefijo [PRUEBA] contienen datos ficticios y también aparecen en el CSV conjunto. Las fechas se muestran en la zona horaria de este navegador.</p>
+    </div>
+    <p id="message" role="status" aria-live="polite"></p>
+  </main>
+  <footer>CallLog Control · Servidor local de la empresa</footer>
+</body>
+</html>

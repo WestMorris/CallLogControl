@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent">
+
+    <ScrollView android:id="@+id/loginPanel" android:layout_width="match_parent" android:layout_height="match_parent" android:fillViewport="true">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:gravity="center_vertical" android:padding="24dp">
+            <ImageView android:layout_width="64dp" android:layout_height="64dp" android:src="@drawable/ic_phone" android:importantForAccessibility="no" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="CallLog Control" android:textSize="32sp" android:textStyle="bold" android:textColor="#183B34" android:layout_marginTop="20dp" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="EL HISTORIAL DE TU EQUIPO" android:textSize="11sp" android:letterSpacing="0.12" android:textColor="#126D62" android:layout_marginTop="8dp" />
+            <TextView android:id="@+id/loginTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Acceso protegido" android:textSize="22sp" android:textStyle="bold" android:textColor="#183B34" android:layout_marginTop="40dp" />
+            <TextView android:id="@+id/loginDescription" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Introduce tu contraseña para consultar y exportar los registros." android:textColor="#526860" android:textSize="15sp" android:layout_marginTop="8dp" />
+            <EditText android:id="@+id/password" android:layout_width="match_parent" android:layout_height="56dp" android:hint="Contraseña" android:inputType="textPassword" android:maxLength="256" android:singleLine="true" android:importantForAutofill="no" android:layout_marginTop="20dp" />
+            <EditText android:id="@+id/confirmation" android:layout_width="match_parent" android:layout_height="56dp" android:hint="Repite la contraseña" android:inputType="textPassword" android:maxLength="256" android:singleLine="true" android:importantForAutofill="no" android:visibility="gone" />
+            <TextView android:id="@+id/loginError" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#A13333" android:textSize="14sp" android:accessibilityLiveRegion="polite" android:layout_marginTop="8dp" />
+            <Button android:id="@+id/unlock" android:layout_width="match_parent" android:layout_height="56dp" android:text="Desbloquear" android:textAllCaps="false" android:textColor="#FFFFFF" android:backgroundTint="#126D62" android:layout_marginTop="12dp" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Uso interno empresarial. La captura continúa con la app bloqueada si has autorizado el acceso al historial." android:textSize="12sp" android:textColor="#526860" android:layout_marginTop="24dp" />
+        </LinearLayout>
+    </ScrollView>
+
+    <LinearLayout android:id="@+id/dashboard" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="20dp" android:visibility="gone">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+            <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="CallLog Control" android:textColor="#183B34" android:textStyle="bold" android:textSize="25sp" />
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="REGISTRO EMPRESARIAL" android:letterSpacing="0.10" android:textColor="#126D62" android:textSize="11sp" android:layout_marginTop="4dp" />
+            </LinearLayout>
+            <Button android:id="@+id/lock" android:layout_width="wrap_content" android:layout_height="48dp" android:text="Bloquear" android:textAllCaps="false" android:backgroundTint="#E2ECE8" android:textColor="#183B34" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="20dp" android:background="@drawable/panel" android:padding="18dp" android:orientation="vertical">
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Tu actividad, en un lugar" android:textColor="#183B34" android:textSize="18sp" android:textStyle="bold" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="14dp">
+                <TextView android:id="@+id/total" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="0\nRegistros" android:textColor="#183B34" android:textSize="20sp" />
+                <TextView android:id="@+id/pending" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="0\nPendientes" android:textColor="#126D62" android:textSize="20sp" />
+            </LinearLayout>
+            <TextView android:id="@+id/status" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Captura pendiente de autorización" android:textColor="#526860" android:textSize="12sp" android:layout_marginTop="14dp" android:accessibilityLiveRegion="polite" />
+        </LinearLayout>
+
+        <Button android:id="@+id/permissions" android:layout_width="match_parent" android:layout_height="48dp" android:text="Autorizar acceso al historial" android:textAllCaps="false" android:backgroundTint="#126D62" android:textColor="#FFFFFF" android:layout_marginTop="8dp" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
+            <Button android:id="@+id/importCalls" android:layout_width="0dp" android:layout_weight="1" android:layout_height="52dp" android:text="Actualizar" android:textAllCaps="false" android:backgroundTint="#126D62" android:textColor="#FFFFFF" />
+            <Button android:id="@+id/exportCsv" android:layout_width="0dp" android:layout_weight="1" android:layout_height="52dp" android:layout_marginStart="8dp" android:text="Exportar CSV" android:textAllCaps="false" android:backgroundTint="#E2ECE8" android:textColor="#183B34" />
+        </LinearLayout>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+            <Button android:id="@+id/settings" android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp" android:text="Servidor" android:textAllCaps="false" style="?android:attr/borderlessButtonStyle" android:textColor="#126D62" />
+            <Button android:id="@+id/sync" android:layout_width="0dp" android:layout_weight="1" android:layout_height="48dp" android:text="Sincronizar" android:textAllCaps="false" style="?android:attr/borderlessButtonStyle" android:textColor="#126D62" />
+        </LinearLayout>
+        <Button android:id="@+id/remoteSync" android:layout_width="match_parent" android:layout_height="48dp" android:text="Activar control remoto" android:textAllCaps="false" android:backgroundTint="#E2ECE8" android:textColor="#183B34" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Llamadas recientes · últimas 200" android:textColor="#183B34" android:textSize="16sp" android:textStyle="bold" android:layout_marginTop="8dp" android:layout_marginBottom="8dp" />
+        <TextView android:id="@+id/empty" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Todavía no hay registros. Autoriza el acceso y pulsa Actualizar para importar el historial del teléfono." android:textColor="#526860" android:textSize="14sp" android:padding="16dp" />
+        <androidx.recyclerview.widget.RecyclerView android:id="@+id/calls" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:clipToPadding="false" android:paddingBottom="12dp" />
+    </LinearLayout>
+</FrameLayout>

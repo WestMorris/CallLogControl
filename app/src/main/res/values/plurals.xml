@@ -1,0 +1,10 @@
+<resources>
+    <plurals name="record_count">
+        <item quantity="one">%d\nRegistro</item>
+        <item quantity="other">%d\nRegistros</item>
+    </plurals>
+    <plurals name="pending_count">
+        <item quantity="one">%d\nPendiente</item>
+        <item quantity="other">%d\nPendientes</item>
+    </plurals>
+</resources>

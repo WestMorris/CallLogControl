@@ -1,0 +1,42 @@
+services:
+  api:
+    build: ./server
+    restart: unless-stopped
+    environment:
+      CALLLOG_ADMIN_TOKEN: ${CALLLOG_ADMIN_TOKEN:?Define una credencial de administrador en .env}
+    volumes:
+      - calllog_data:/data
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 64
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  https:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      CALLLOG_DOMAIN: ${CALLLOG_DOMAIN:?Define el dominio en .env}
+      ACME_EMAIL: ${ACME_EMAIL:?Define tu correo para los certificados en .env}
+    volumes:
+      - ./server/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 64
+
+volumes:
+  calllog_data:
+  caddy_data:
+  caddy_config:

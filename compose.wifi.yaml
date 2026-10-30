@@ -1,0 +1,44 @@
+name: calllogcontrol-wifi
+
+services:
+  api:
+    build: ./server
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8088:8080"
+    environment:
+      CALLLOG_ADMIN_TOKEN: ${CALLLOG_ADMIN_TOKEN:?Define CALLLOG_ADMIN_TOKEN en .env.wifi}
+    volumes:
+      - calllog_data:/data
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 64
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  https:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "${CALLLOG_LAN_IP:?Define la IP Wi-Fi en .env.wifi}:8443:8443"
+    environment:
+      CALLLOG_LAN_IP: ${CALLLOG_LAN_IP}
+    volumes:
+      - ./server/Caddyfile.wifi:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 64
+
+volumes:
+  calllog_data:
+  caddy_data:
+  caddy_config:

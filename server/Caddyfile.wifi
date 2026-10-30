@@ -1,0 +1,13 @@
+{
+    auto_https disable_redirects
+    default_sni {$CALLLOG_LAN_IP}
+    skip_install_trust
+    admin off
+}
+https://{$CALLLOG_LAN_IP}:8443 {
+    tls internal
+    request_body {
+        max_size 256KB
+    }
+    reverse_proxy api:8080
+}
