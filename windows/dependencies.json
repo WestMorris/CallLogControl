@@ -1,0 +1,17 @@
+[
+  {
+    "name": "python-3.13.7-embed-amd64.zip",
+    "url": "https://www.python.org/ftp/python/3.13.7/python-3.13.7-embed-amd64.zip",
+    "sha256": "f6cca216a359be84797cabb54149ce5e062afb16cc7567eb7fc51cacb2d86b65"
+  },
+  {
+    "name": "caddy_2.11.7_windows_amd64.zip",
+    "url": "https://github.com/caddyserver/caddy/releases/download/v2.11.7/caddy_2.11.7_windows_amd64.zip",
+    "sha256": "0a1edc0b799512051c57071ce0e798d3f2cf67dc98171366f1d2b326072e3b06"
+  },
+  {
+    "name": "WinSW-x64.exe",
+    "url": "https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe",
+    "sha256": "05b82d46ad331cc16bdc00de5c6332c1ef818df8ceefcd49c726553209b3a0da"
+  }
+]

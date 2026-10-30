@@ -13,8 +13,6 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
-import java.net.URL
-import javax.net.ssl.HttpsURLConnection
 
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork() = SyncClient.sync(applicationContext, runAttemptCount)
@@ -23,8 +21,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
 object SyncClient {
     val mutex = Mutex()
 
-    fun poll(endpoint: String, token: String, waitSeconds: Int = 0): String? {
-        val (code, body) = request(endpoint, token, "/v1/sync-request?wait=$waitSeconds", readTimeout = (waitSeconds + 10) * 1000)
+    fun poll(endpoint: String, token: String, waitSeconds: Int = 0, ca: String? = null): String? {
+        val (code, body) = request(endpoint, token, "/v1/sync-request?wait=$waitSeconds", readTimeout = (waitSeconds + 10) * 1000, ca = ca)
         if (code != 200) throw HttpError(code)
         val data = JSONObject(body)
         return if (data.isNull("request_id")) null else data.getString("request_id")
@@ -36,7 +34,8 @@ object SyncClient {
             try {
                 val security = SecurityStore(context)
                 val (endpoint, token) = security.credentials() ?: return@withLock Result.success()
-                val requestId = requestedId ?: poll(endpoint, token)
+                val ca = security.serverCa
+                val requestId = requestedId ?: poll(endpoint, token, ca = ca)
                 if (requestId != null) {
                     if (!security.consented || !CallImporter.permitted(context)) throw SecurityException()
                     CallImporter.import(context)
@@ -46,7 +45,7 @@ object SyncClient {
                     val batch = dao.pending()
                     if (batch.isEmpty()) {
                         if (requestId != null) {
-                            val code = request(endpoint, token, "/v1/sync-ack", JSONObject().put("request_id", requestId)).first
+                            val code = request(endpoint, token, "/v1/sync-ack", JSONObject().put("request_id", requestId), ca = ca).first
                             if (code != 204) throw HttpError(code)
                         }
                         status.edit().putLong("last_sync", System.currentTimeMillis()).putString("sync_error", "").apply()
@@ -58,7 +57,7 @@ object SyncClient {
                             .put("started_at", call.startedAt).put("duration_seconds", call.durationSeconds)
                             .put("presentation", call.presentation))
                     }
-                    val code = request(endpoint, token, "/v1/calls", JSONObject().put("calls", calls)).first
+                    val code = request(endpoint, token, "/v1/calls", JSONObject().put("calls", calls), ca = ca).first
                     if (code != 204) throw HttpError(code)
                     dao.acknowledge(batch)
                     status.edit().putLong("last_sync", System.currentTimeMillis()).putString("sync_error", "").apply()
@@ -83,8 +82,8 @@ object SyncClient {
         }
     }
 
-    private fun request(endpoint: String, token: String, path: String, payload: JSONObject? = null, readTimeout: Int = 20_000): Pair<Int, String> {
-        val connection = URL(ServerAddress.normalize(endpoint) + path).openConnection() as HttpsURLConnection
+    private fun request(endpoint: String, token: String, path: String, payload: JSONObject? = null, readTimeout: Int = 20_000, ca: String? = null): Pair<Int, String> {
+        val connection = ServerTls.open(endpoint, path, ca)
         try {
             connection.instanceFollowRedirects = false
             connection.connectTimeout = 10_000

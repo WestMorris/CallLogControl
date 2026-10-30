@@ -33,6 +33,8 @@ import com.calllogcontrol.Database.CallDatabase
 import com.calllogcontrol.Database.CallRecord
 import com.calllogcontrol.databinding.ActivityMainBinding
 import com.calllogcontrol.databinding.RowCallBinding
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -49,6 +51,7 @@ class MainActivity : ComponentActivity() {
     private var authenticated = false
     private var epoch = 0
     private var pendingExport: Uri? = null
+    private var pendingEnrollment: String? = null
     private var dialog: AlertDialog? = null
     private var dashboardJob: Job? = null
     private val adapter = CallsAdapter()
@@ -56,6 +59,13 @@ class MainActivity : ComponentActivity() {
         runOnUiThread { if (authenticated) refreshStatus() }
     }
     private val dao by lazy { CallDatabase.get(this).calls() }
+    private val scanQr = registerForActivityResult(ScanContract()) { result ->
+        result.contents?.let { value ->
+            pendingEnrollment = value
+            if (authenticated) reviewEnrollment()
+            else binding.loginError.text = "Desbloquea para confirmar el alta por QR."
+        }
+    }
     private val permissionRequest = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         if (CallImporter.permitted(this)) {
             BackgroundWork.schedule(this)
@@ -100,6 +110,11 @@ class MainActivity : ComponentActivity() {
             createCsv.launch("llamadas-${java.time.LocalDate.now()}.csv")
         }
         binding.settings.setOnClickListener { serverSettings() }
+        binding.enroll.setOnClickListener {
+            scanQr.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                .setCaptureActivity(QrScanActivity::class.java).setOrientationLocked(false)
+                .setBeepEnabled(false).setPrompt("Escanea el QR de alta del panel de tu empresa"))
+        }
         binding.sync.setOnClickListener {
             if (security.endpoint.isEmpty()) serverSettings()
             else { BackgroundWork.sync(this); toast("Sincronización programada; requiere conexión") }
@@ -163,6 +178,7 @@ class MainActivity : ComponentActivity() {
                     }
                     if (security.consented && CallImporter.permitted(this@MainActivity)) BackgroundWork.collect(this@MainActivity)
                     pendingExport?.let { export(it) }
+                    if (pendingEnrollment != null) reviewEnrollment()
                 } else binding.loginError.text = "Contraseña incorrecta."
             } catch (error: CancellationException) { throw error }
             catch (_: Exception) { binding.loginError.text = "No se pudo verificar el acceso. Intenta de nuevo." }
@@ -181,7 +197,11 @@ class MainActivity : ComponentActivity() {
         binding.loginPanel.isVisible = true
         binding.password.text.clear()
         binding.confirmation.text.clear()
-        binding.loginError.text = if (pendingExport != null) "Desbloquea para guardar el CSV en el destino elegido." else ""
+        binding.loginError.text = when {
+            pendingEnrollment != null -> "Desbloquea para confirmar el alta por QR."
+            pendingExport != null -> "Desbloquea para guardar el CSV en el destino elegido."
+            else -> ""
+        }
         binding.confirmation.isVisible = !security.hasPassword
         binding.loginTitle.text = if (security.hasPassword) "Acceso protegido" else "Protege este equipo"
         binding.loginDescription.text = if (security.hasPassword) "Introduce tu contraseña para consultar y exportar los registros."
@@ -213,12 +233,42 @@ class MainActivity : ComponentActivity() {
         if (imported > 0) lines.add("Última lectura: ${dateTime(imported)}")
         if (security.endpoint.isEmpty()) lines.add("Servidor sin configurar · almacenamiento local")
         else lines.add(if (synced > 0) "Último envío: ${dateTime(synced)}" else "Servidor configurado · esperando primer envío")
+        if (security.deviceName.isNotEmpty()) lines.add("Equipo: ${security.deviceName}")
         if (RemoteSyncService.running) {
             lines.add("Control remoto activo · notificación permanente")
             if (!getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)) lines.add("Permite batería sin restricciones para responder con pantalla apagada.")
         }
         listOf("import_error", "sync_error").map { prefs.getString(it, "").orEmpty() }.filter { it.isNotEmpty() }.forEach(lines::add)
         binding.status.text = lines.joinToString("\n")
+    }
+
+    private fun reviewEnrollment() {
+        val value = pendingEnrollment ?: return
+        pendingEnrollment = null
+        val enrollment = try { Enrollment.parse(value) } catch (_: Exception) {
+            toast("QR no válido. Genera uno nuevo desde el panel de tu empresa."); return
+        }
+        dialog = AlertDialog.Builder(this).setTitle("Vincular con tu servidor")
+            .setMessage("Servidor: ${enrollment.endpoint}\nHuella: ${ServerTls.fingerprint(enrollment.ca).take(16)}\n\nConfirma que el código procede del panel de tu empresa. Al vincular se enviará todo el historial local por HTTPS. La confianza en este certificado se limita a este servidor dentro de la app.")
+            .setNegativeButton("Cancelar", null).setPositiveButton("Vincular y sincronizar") { _, _ ->
+                binding.enroll.isEnabled = false
+                lifecycleScope.launch {
+                    try {
+                        withContext(Dispatchers.IO) { SyncClient.mutex.withLock {
+                            val device = enrollment.claim()
+                            dao.resetSync()
+                            security.saveCredentials(enrollment.endpoint, device.getString("token"), enrollment.ca, device.getString("name"))
+                            getSharedPreferences("status", MODE_PRIVATE).edit().remove("sync_error").remove("last_sync").apply()
+                        } }
+                        BackgroundWork.schedule(this@MainActivity)
+                        BackgroundWork.sync(this@MainActivity)
+                        toast("Equipo vinculado. Autoriza el historial si aún no lo has hecho.")
+                        if (authenticated) refreshStatus()
+                    } catch (error: CancellationException) { throw error }
+                    catch (_: Exception) { toast("No se pudo vincular. Comprueba la Wi-Fi, la hora y el servidor; si el QR venció o se usó, genera otro.") }
+                    finally { binding.enroll.isEnabled = true }
+                }
+            }.show().also { it.window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE) }
     }
 
     private fun serverSettings() {

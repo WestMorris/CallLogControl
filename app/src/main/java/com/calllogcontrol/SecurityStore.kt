@@ -30,6 +30,8 @@ class SecurityStore(context: Context) {
     fun validToken(token: String) = token.length in minimumTokenLength..256 && token.none { it.isWhitespace() || it.isISOControl() }
     val hasPassword get() = prefs.contains("password_hash")
     val endpoint get() = prefs.getString("endpoint", "").orEmpty()
+    val serverCa get() = prefs.getString("server_ca", null)
+    val deviceName get() = prefs.getString("device_name", "").orEmpty()
     val consented get() = prefs.getBoolean("consented", false)
     val cooldownSeconds get() = ((prefs.getLong("blocked_until", 0) - System.currentTimeMillis()) / 1000 + 1).coerceAtLeast(0)
 
@@ -63,15 +65,19 @@ class SecurityStore(context: Context) {
         return endpoint to String(cipher.doFinal(decode(parts[1])), Charsets.UTF_8)
     }
 
-    fun saveCredentials(url: String, token: String) {
+    fun saveCredentials(url: String, token: String, ca: String? = null, name: String? = null) {
         require(validToken(token))
+        val normalized = ServerAddress.normalize(url)
+        val selectedCa = ca ?: if (normalized == endpoint) serverCa else null
+        if (selectedCa != null) ServerTls.certificate(selectedCa)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key())
         val encrypted = encode(cipher.iv) + ":" + encode(cipher.doFinal(token.toByteArray(Charsets.UTF_8)))
-        check(prefs.edit().putString("endpoint", ServerAddress.normalize(url)).putString("token", encrypted).commit())
+        check(prefs.edit().putString("endpoint", normalized).putString("token", encrypted)
+            .putString("server_ca", selectedCa).putString("device_name", name ?: if (normalized == endpoint) deviceName else "").commit())
     }
 
-    fun disableSync() { check(prefs.edit().remove("endpoint").remove("token").commit()) }
+    fun disableSync() { check(prefs.edit().remove("endpoint").remove("token").remove("server_ca").remove("device_name").commit()) }
 
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }

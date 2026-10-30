@@ -1,0 +1,41 @@
+name: Windows installer
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['windows/**', 'server/**', 'THIRD_PARTY_NOTICES.md', '.github/workflows/windows-installer.yml']
+permissions:
+  contents: read
+jobs:
+  installer:
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Parse PowerShell and test API and configuration
+        shell: powershell
+        run: |
+          Get-ChildItem windows/*.ps1 | ForEach-Object {
+            $errors = $null
+            $tokens = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors)
+            if ($errors) { throw ($errors | Out-String) }
+          }
+          python -m unittest discover -s server -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build offline installer
+        shell: powershell
+        run: ./windows/Build-Installer.ps1
+      - name: Install and exercise real Windows services
+        shell: powershell
+        run: ./windows/Smoke-Test.ps1 -SetupPath "$pwd/build/windows/CallLogControl-Setup-1.1.0-x64.exe"
+      - name: Publish installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CallLogControl-Windows-1.1.0
+          path: build/windows/CallLogControl-Setup-1.1.0-x64.exe
+          if-no-files-found: error
+          retention-days: 14

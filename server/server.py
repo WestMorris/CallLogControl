@@ -1,5 +1,6 @@
 """CallLogControl: HTTPS behind a reverse proxy; Python standard library only."""
 import argparse
+import base64
 from contextlib import contextmanager
 import csv
 import hashlib
@@ -10,12 +11,14 @@ import os
 import re
 from pathlib import Path
 import secrets
+import ssl
 import sqlite3
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 import uuid
+from qrcodegen import QrCode
 
 MAX_BODY = 256 * 1024
 MAX_BATCH = 500
@@ -53,6 +56,9 @@ class Store:
                     PRIMARY KEY(device_id, id)
                 );
                 CREATE INDEX IF NOT EXISTS calls_date ON calls(started_at);
+                CREATE TABLE IF NOT EXISTS enrollments (
+                    code_hash TEXT PRIMARY KEY, name TEXT NOT NULL, expires_at INTEGER NOT NULL
+                );
             """)
             columns = {row["name"] for row in db.execute("PRAGMA table_info(devices)")}
             for name, kind in [("last_seen_at", "INTEGER"), ("last_sync_at", "INTEGER"),
@@ -80,6 +86,31 @@ class Store:
             db.execute("INSERT INTO devices(id,name,token_hash) VALUES (?,?,?)",
                        (device_id, name.strip(), token_hash(token)))
         return {"device_id": device_id, "name": name.strip(), "token": token}
+
+    def invite(self, name):
+        if not isinstance(name, str) or not name.strip() or len(name) > 120:
+            raise ValueError("El nombre debe tener entre 1 y 120 caracteres")
+        code, expires = secrets.token_urlsafe(32), int(time.time()) + 300
+        with self.connect() as db:
+            db.execute("DELETE FROM enrollments WHERE expires_at<=?", (int(time.time()),))
+            db.execute("INSERT INTO enrollments VALUES (?,?,?)", (token_hash(code), name.strip(), expires))
+        return code, expires
+
+    def claim(self, code):
+        if not isinstance(code, str) or not re.fullmatch(r"[A-Za-z0-9_-]{43}", code):
+            return None
+        with self.connect() as db:
+            # Serialize redemption: two phones must never consume the same invitation.
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT name FROM enrollments WHERE code_hash=? AND expires_at>?",
+                             (token_hash(code), int(time.time()))).fetchone()
+            if row is None:
+                return None
+            device_id, token = str(uuid.uuid4()), secrets.token_urlsafe(32)
+            db.execute("INSERT INTO devices(id,name,token_hash) VALUES (?,?,?)",
+                       (device_id, row["name"], token_hash(token)))
+            db.execute("DELETE FROM enrollments WHERE code_hash=?", (token_hash(code),))
+        return {"device_id": device_id, "name": row["name"], "token": token}
 
     def device_for(self, token):
         with self.connect() as db:
@@ -148,9 +179,11 @@ class Store:
 class Server(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, address, store, admin_token):
+    def __init__(self, address, store, admin_token, public_url="", ca_file=""):
         self.store = store
         self.admin_hash = token_hash(admin_token)
+        self.public_url = public_url
+        self.ca_file = ca_file
         self.slots = threading.BoundedSemaphore(16)
         self.poll_slots = threading.BoundedSemaphore(8)
         self.sync_condition = threading.Condition()
@@ -201,7 +234,70 @@ class Handler(BaseHTTPRequestHandler):
     def is_admin(self):
         return hmac.compare_digest(token_hash(self.bearer()), self.server.admin_hash)
 
+    def read_json(self):
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            self.reply(400, {"error": "Content-Length inválido"})
+            return None
+        if not 0 < length <= MAX_BODY or self.headers.get("Transfer-Encoding"):
+            self.reply(413, {"error": "Tamaño de lote inválido"})
+            return None
+        if self.headers.get_content_type() != "application/json":
+            self.reply(415, {"error": "Se requiere application/json"})
+            return None
+        try:
+            raw = self.rfile.read(length)
+            payload = json.loads(raw)
+            if len(raw) != length or not isinstance(payload, dict):
+                raise ValueError("Se requiere un objeto JSON completo")
+            return payload
+        except (ValueError, UnicodeDecodeError) as error:
+            self.reply(400, {"error": str(error)})
+            return None
+
     def do_POST(self):
+        if self.path == "/v1/enrollments":
+            if not self.is_admin():
+                return self.reply(401, {"error": "Se requiere credencial de administrador"})
+            payload = self.read_json()
+            if payload is None:
+                return
+            try:
+                if set(payload) != {"name"}:
+                    raise ValueError("Indica únicamente el nombre del equipo")
+                origin = urlsplit(self.server.public_url)
+                if (origin.scheme != "https" or not origin.hostname or origin.username or origin.password
+                        or origin.path not in ("", "/") or origin.query or origin.fragment):
+                    raise OSError("URL HTTPS no configurada")
+                pem = Path(self.server.ca_file).read_text(encoding="ascii")
+                ca = base64.b64encode(ssl.PEM_cert_to_DER_cert(pem)).decode()
+                if len(ca) > 2400:
+                    raise OSError("Certificado demasiado grande para el QR")
+                code, expires = self.server.store.invite(payload["name"])
+                bundle = json.dumps({"v": 1, "url": self.server.public_url.rstrip("/"),
+                                     "ca": ca, "code": code}, separators=(",", ":"))
+                qr = QrCode.encode_text(bundle, QrCode.Ecc.MEDIUM)
+                size = qr.get_size()
+                path = " ".join(f"M{x+4},{y+4}h1v1h-1z" for y in range(size)
+                                for x in range(size) if qr.get_module(x, y))
+                svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {size+8} {size+8}" shape-rendering="crispEdges">'
+                       f'<rect width="100%" height="100%" fill="white"/><path d="{path}" fill="black"/></svg>')
+                return self.reply(201, {"qr_svg": svg, "expires_at": expires * 1000,
+                                        "ca_fingerprint": hashlib.sha256(base64.b64decode(ca)).hexdigest(),
+                                        "server_url": self.server.public_url, "name": payload["name"].strip()})
+            except ValueError as error:
+                return self.reply(400, {"error": str(error)})
+            except (OSError, ssl.SSLError):
+                return self.reply(503, {"error": "El alta QR necesita CALLLOG_PUBLIC_URL y CALLLOG_CA_FILE con el certificado público de Caddy. Revisa la configuración del servidor."})
+        if self.path == "/v1/enrollments/claim":
+            payload = self.read_json()
+            if payload is None:
+                return
+            if payload:
+                return self.reply(400, {"error": "No se admiten campos adicionales"})
+            device = self.server.store.claim(self.bearer())
+            return self.reply(200, device) if device else self.reply(401, {"error": "QR vencido o utilizado. Genera otro en el panel."})
         sync_route = re.fullmatch(r"/v1/devices/([0-9a-f-]{36})/sync", self.path)
         if sync_route:
             if not self.is_admin():
@@ -216,19 +312,10 @@ class Handler(BaseHTTPRequestHandler):
         device = self.server.store.device_for(self.bearer())
         if device is None:
             return self.reply(401, {"error": "Credencial inválida o equipo revocado"})
+        payload = self.read_json()
+        if payload is None:
+            return
         try:
-            length = int(self.headers.get("Content-Length", "0"))
-        except ValueError:
-            return self.reply(400, {"error": "Content-Length inválido"})
-        if not 0 < length <= MAX_BODY or self.headers.get("Transfer-Encoding"):
-            return self.reply(413, {"error": "Tamaño de lote inválido"})
-        if self.headers.get_content_type() != "application/json":
-            return self.reply(415, {"error": "Se requiere application/json"})
-        try:
-            raw = self.rfile.read(length)
-            if len(raw) != length:
-                raise ValueError("Cuerpo incompleto")
-            payload = json.loads(raw)
             if self.path == "/v1/calls":
                 self.server.store.ingest(device, payload)
             else:
@@ -251,7 +338,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+            self.send_header("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
             self.end_headers()
             return self.wfile.write(body)
         if url.path == "/healthz":
@@ -373,7 +460,8 @@ def main():
         token = os.getenv("CALLLOG_ADMIN_TOKEN", "")
         if len(token) < 32:
             parser.error("Define CALLLOG_ADMIN_TOKEN con al menos 32 caracteres aleatorios")
-        server = Server((args.host, args.port), store, token)
+        server = Server((args.host, args.port), store, token,
+                        os.getenv("CALLLOG_PUBLIC_URL", ""), os.getenv("CALLLOG_CA_FILE", ""))
         print(f"CallLogControl en {args.host}:{args.port}", flush=True)
         try:
             server.serve_forever()

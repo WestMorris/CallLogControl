@@ -12,11 +12,14 @@
       <span class="eyebrow">ACCESO AL SERVIDOR</span><h1>El historial de tu flota.</h1>
       <p>Consulta llamadas, exporta los registros y solicita una actualización desde un solo lugar.</p>
       <form id="login-form"><label for="admin-key">Credencial de administrador</label><input id="admin-key" type="password" required autocomplete="off" spellcheck="false" placeholder="Pega la clave de CALLLOG_ADMIN_TOKEN"><button class="primary" type="submit">Entrar al panel</button></form>
-      <p class="note">La clave está en <code>.env.wifi</code> en la Mac. La credencial del teléfono no permite administrar el servidor. La sesión se mantiene hasta salir o recargar esta página.</p>
+      <p class="note">Con el instalador Windows, abre «Clave de administrador» desde el menú Inicio. En instalaciones manuales está en <code>.env.wifi</code>. La credencial del teléfono no permite administrar. La sesión termina al salir o recargar.</p>
     </section>
     <div id="workspace" hidden>
       <div class="intro"><div><span class="eyebrow">VISTA GENERAL</span><h1>Actividad de tus equipos</h1><p>Registros recibidos por el servidor, con su equipo de origen.</p></div><button id="refresh">Actualizar vista</button></div>
       <div class="metrics"><section class="card"><span>Equipos registrados</span><strong id="device-count">0</strong></section><section class="card"><span>Llamadas recibidas</span><strong id="call-count">0</strong></section><section class="card"><span>Solicitudes pendientes</span><strong id="request-count">0</strong></section></div>
+      <section class="card"><h2>Agregar teléfono por QR</h2><p>Asigna un nombre y escanea el código desde la app. Cada QR sirve una sola vez y vence a los cinco minutos.</p>
+        <form id="enrollment-form" class="actions"><label for="enrollment-name">Nombre del equipo</label><input id="enrollment-name" required maxlength="120" placeholder="Ventas 01" autocomplete="off"><button id="enrollment-create" class="primary" type="submit">Generar QR</button></form>
+      </section>
       <section class="card"><div class="section-head"><div><h2>Equipos</h2><p>Solicitar sincronización deja una petición pendiente hasta que la app contacte al servidor.</p></div></div>
         <div class="table-wrap"><table><thead><tr><th>Equipo</th><th>Llamadas</th><th>Último contacto</th><th>Última sincronización</th><th>Solicitud</th><th>Acciones</th></tr></thead><tbody id="devices"></tbody></table></div>
         <p class="note">Para responder en segundos, activa Control remoto en la app y permite batería sin restricciones. Funciona con notificación permanente y mayor consumo. Sin ese modo, el contacto periódico puede tardar 15 minutos o más. El equipo debe poder acceder al servidor por Wi‑Fi.</p>
@@ -28,6 +31,7 @@
       <p class="note">Los equipos con prefijo [PRUEBA] contienen datos ficticios y también aparecen en el CSV conjunto. Las fechas se muestran en la zona horaria de este navegador.</p>
     </div>
     <p id="message" role="status" aria-live="polite"></p>
+    <dialog id="enrollment-dialog" aria-labelledby="enrollment-title"><h2 id="enrollment-title">Alta del teléfono</h2><p id="enrollment-info"></p><img id="enrollment-qr" alt="Código QR de alta, privado y de un solo uso"><p class="note">En la app desbloqueada pulsa «Vincular por QR». Escanea únicamente el QR del servidor de tu empresa. No compartas este código.</p><button id="enrollment-close">Cerrar</button></dialog>
   </main>
   <footer>CallLog Control · Servidor local de la empresa</footer>
 </body>

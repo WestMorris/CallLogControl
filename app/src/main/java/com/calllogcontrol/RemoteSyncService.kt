@@ -40,9 +40,10 @@ class RemoteSyncService : Service() {
                 try {
                     // Keep the local command channel responsive with the screen off; release when the user stops it.
                     wakeLock.acquire(10 * 60 * 1000L)
-                    val credentials = SecurityStore(this@RemoteSyncService).credentials()
+                    val security = SecurityStore(this@RemoteSyncService)
+                    val credentials = security.credentials()
                     if (credentials == null) { stopSelf(); break }
-                    val request = SyncClient.poll(credentials.first, credentials.second, waitSeconds = 25)
+                    val request = SyncClient.poll(credentials.first, credentials.second, waitSeconds = 25, ca = security.serverCa)
                     ensureActive()
                     if (request != null && SecurityStore(this@RemoteSyncService).credentials() == credentials) {
                         val result = SyncClient.sync(this@RemoteSyncService, requestedId = request)

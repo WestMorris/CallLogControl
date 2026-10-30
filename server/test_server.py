@@ -8,6 +8,7 @@ import threading
 import time
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -192,6 +193,44 @@ class ServerTest(unittest.TestCase):
                 self.assertEqual(db.execute("SELECT COUNT(*) FROM calls").fetchone()[0], 1)
                 self.assertEqual(db.execute("SELECT name FROM devices").fetchone()[0], "Equipo existente")
                 self.assertIsNone(db.execute("SELECT sync_requested_id FROM devices").fetchone()[0])
+
+    def test_qr_enrollment_requires_admin_and_configured_tls(self):
+        route = "/v1/enrollments"
+        self.assertEqual(self.request(route, self.a["token"], {"name": "Nuevo"})[0], 401)
+        self.assertEqual(self.request(route, self.admin, {"name": "Nuevo"})[0], 503)
+        self.server.public_url = "https://192.168.1.100:8443"
+        self.server.ca_file = str(Path(__file__).parent / "fixtures/enrollment-ca.crt")
+        self.assertEqual(self.request(route, self.admin, {"name": ""})[0], 400)
+        self.assertEqual(self.request(route, self.admin, {"name": "Nuevo", "token": "bad"})[0], 400)
+        status, body = self.request(route, self.admin, {"name": "Ventas QR"})
+        data = json.loads(body)
+        self.assertEqual(status, 201)
+        self.assertTrue(data["qr_svg"].startswith('<svg xmlns='))
+        self.assertNotIn("script", data["qr_svg"])
+        self.assertGreater(data["expires_at"], time.time() * 1000)
+        self.assertEqual(data["server_url"], self.server.public_url)
+        with self.store.connect() as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM devices").fetchone()[0], 2)
+
+    def test_enrollment_is_single_use_expires_and_issues_only_a_device_token(self):
+        code, expires = self.store.invite("Ventas QR")
+        route = "/v1/enrollments/claim"
+        self.assertEqual(self.request(route, code, {"extra": 1})[0], 400)
+        self.assertEqual(self.request(route, "invalid", {})[0], 401)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda _: self.request(route, code, {}), range(2)))
+        self.assertEqual(sorted(status for status, _ in results), [200, 401])
+        data = json.loads(next(body for status, body in results if status == 200))
+        self.assertEqual(data["name"], "Ventas QR")
+        self.assertEqual(self.send(data, [self.call])[0], 204)
+        self.assertEqual(self.request("/v1/devices", data["token"])[0], 401)
+        self.assertEqual(self.request(route, code, {})[0], 401)
+        expired, deadline = self.store.invite("Expirado")
+        with patch("server.time.time", return_value=deadline):
+            self.assertIsNone(self.store.claim(expired))
+        with self.store.connect() as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM devices").fetchone()[0], 3)
+            self.assertNotIn(code, str([tuple(r) for r in db.execute("SELECT * FROM enrollments")]))
 
 
 if __name__ == "__main__":

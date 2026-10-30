@@ -11,8 +11,8 @@ android {
         applicationId = "com.calllogcontrol"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.0.3"
+        versionCode = 5
+        versionName = "1.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     compileOptions {
@@ -22,6 +22,7 @@ android {
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { viewBinding = true }
     testOptions { unitTests.isReturnDefaultValues = true }
+    sourceSets.getByName("androidTest").assets.srcDir("../server/fixtures")
     // A clean checkout trusts system CAs; local Wi-Fi builds use their own untracked CA.
     if (!file("src/debug/res/raw/calllog_wifi_ca.crt").isFile) {
         sourceSets.getByName("debug").res.setSrcDirs(listOf("src/debugDefault/res"))
@@ -31,6 +32,7 @@ android {
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 
 dependencies {
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("androidx.activity:activity-ktx:1.11.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.4")
     implementation("androidx.recyclerview:recyclerview:1.4.0")

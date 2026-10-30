@@ -2,19 +2,24 @@
 (() => {
   const $ = id => document.getElementById(id);
   let key = "", timer = null, offset = 0, loading = false;
+  let qrUrl = null, qrExpiry = null;
   const date = value => value ? new Date(value).toLocaleString("es", {dateStyle:"short", timeStyle:"short"}) : "Sin dato";
   const types = {1:"Entrante",2:"Saliente",3:"Perdida",4:"Buzón de voz",5:"Rechazada",6:"Bloqueada",7:"Contestada en otro equipo"};
   function message(text = "", error = false) { $("message").textContent = text; $("message").classList.toggle("error", error); }
   function logout() {
+    closeEnrollment();
     key = ""; clearInterval(timer); timer = null;
     $("workspace").hidden = true; $("logout").hidden = true; $("login").hidden = false;
     $("devices").replaceChildren(); $("calls").replaceChildren(); $("device-filter").replaceChildren(new Option("Todos los equipos", ""));
     $("admin-key").value = "";
   }
   async function api(path, options = {}) {
-    const response = await fetch(path, {...options, cache:"no-store", headers:{Authorization:`Bearer ${key}`}});
+    const response = await fetch(path, {...options, cache:"no-store", headers:{...options.headers, Authorization:`Bearer ${key}`}});
     if (response.status === 401) { logout(); throw Error("Credencial de administrador incorrecta o sesión sin acceso."); }
-    if (!response.ok) throw Error(`El servidor respondió ${response.status}. Intenta de nuevo.`);
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw Error(data.error || `El servidor respondió ${response.status}. Intenta de nuevo.`);
+    }
     return response;
   }
   function cell(row, value) { const td = document.createElement("td"); td.textContent = value; row.append(td); return td; }
@@ -84,6 +89,31 @@
     } finally { loading = false; }
   }
   async function safeRefresh() { try { await refresh(); } catch (error) { message(error.message, true); } }
+  function clearQr() {
+    clearTimeout(qrExpiry); qrExpiry = null;
+    $("enrollment-qr").removeAttribute("src");
+    if (qrUrl) URL.revokeObjectURL(qrUrl);
+    qrUrl = null;
+  }
+  function closeEnrollment() { clearQr(); $("enrollment-dialog").close(); }
+  $("enrollment-form").addEventListener("submit", async event => {
+    event.preventDefault(); $("enrollment-create").disabled = true; message();
+    try {
+      const response = await api("/v1/enrollments", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({name:$("enrollment-name").value.trim()})});
+      const data = await response.json();
+      if (!key) return;
+      clearQr();
+      $("enrollment-title").textContent = data.name;
+      $("enrollment-info").textContent = `${data.server_url} · huella ${data.ca_fingerprint.slice(0,16)} · válido hasta ${date(data.expires_at)}`;
+      qrUrl = URL.createObjectURL(new Blob([data.qr_svg], {type:"image/svg+xml"}));
+      $("enrollment-qr").src = qrUrl;
+      $("enrollment-dialog").showModal();
+      qrExpiry = setTimeout(() => { clearQr(); $("enrollment-info").textContent = "Este QR venció. Cierra y genera otro."; }, Math.max(0, data.expires_at - Date.now()));
+    } catch (error) { message(error.message, true); }
+    finally { $("enrollment-create").disabled = false; }
+  });
+  $("enrollment-close").addEventListener("click", closeEnrollment);
+  $("enrollment-dialog").addEventListener("close", clearQr);
   $("login-form").addEventListener("submit", async event => {
     event.preventDefault(); key = $("admin-key").value.trim(); $("admin-key").value = ""; offset = 0; message();
     try {
