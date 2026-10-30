@@ -17,6 +17,25 @@ App Android en Kotlin y microservicio para registrar el historial de llamadas de
 - `SyncWorker.kt` envía lotes de 100 registros por HTTPS, con reintentos y credencial propia por equipo. Nunca borra registros locales tras enviarlos.
 - Servidor con almacenamiento idempotente, listado de equipos, revocación de credenciales y CSV de un equipo o de todos. Exportación por streaming para evitar cargar el historial completo en RAM.
 
+## Capturas de pantalla
+
+Las capturas usan únicamente datos ficticios: números de ejemplo, llamadas simuladas y equipos de prueba. No muestran registros reales ni credenciales.
+
+### Aplicación Android
+
+Creación de contraseña e historial local de llamadas.
+
+<p>
+  <img src="docs/screenshots/onboarding.png" alt="App Android: creación de contraseña, con campos vacíos" width="280">
+  <img src="docs/screenshots/dashboard.png" alt="App Android: historial local con una llamada ficticia" width="280">
+</p>
+
+### Panel web
+
+Vista de equipos, solicitudes de sincronización y llamadas simuladas de Ventas y Soporte.
+
+<img src="docs/screenshots/panel-prueba.jpg" alt="Panel web de administración con equipos y registros ficticios" width="600">
+
 ## Compilar e instalar Android
 
 Abrir esta carpeta en Android Studio. Requiere JDK 17 o superior compatible con Gradle 8.13, Android SDK 36 y Build Tools 35.0.0. Android mínimo: **8.0 / API 26**. Gradle descarga las dependencias en la primera compilación.
@@ -166,8 +185,6 @@ Ejecutar las pruebas instrumentadas en un **emulador dedicado sin datos reales**
 Validar en cada modelo de teléfono: una llamada entrante, saliente, perdida y rechazada; llamadas seguidas; reinicio; modo avión y recuperación; permiso revocado; credencial revocada; app bloqueada; exportación. Las pruebas de emulador no sustituyen las llamadas reales.
 
 Verificación realizada el **30/10/2026**: APK debug compilado, pruebas Kotlin y Lint sin errores. Las 11 pruebas HTTP cubren también el panel, la paginación, migración de la base, aislamiento de comandos, confirmaciones y respuesta del canal remoto. El servidor Docker preservó los 19 registros existentes tras actualizar. Se verificaron filtro, solicitud y ambos CSV desde el navegador con datos ficticios. Una solicitud real por HTTPS se completó en **0,756 segundos**, con la actividad Android cerrada y Doze forzado en un emulador Android 14 con excepción de batería. La velocidad y continuidad del modo remoto deben validarse en el teléfono físico.
-
-Capturas del emulador con datos ficticios: [primer inicio](docs/screenshots/onboarding.png) y [historial](docs/screenshots/dashboard.png).
 
 ## Restricciones y protección de datos
 
