@@ -182,3 +182,7 @@ Capturas del emulador con datos ficticios: [primer inicio](docs/screenshots/onbo
 - El panel usa la credencial de administrador, sin cuentas adicionales, y mantiene la sesión solo en memoria del navegador. No hay recuperación de contraseña, grabación de audio ni publicación automática.
 
 Referencias: [permisos Android](https://developer.android.com/reference/android/Manifest.permission#READ_CALL_LOG), [tipos de servicios en primer plano](https://developer.android.com/develop/background-work/services/fgs/service-types), [política de permisos de llamadas de Google Play](https://support.google.com/googleplay/android-developer/answer/10208820).
+
+## Licencia
+
+Este proyecto se distribuye bajo la [licencia MIT](LICENSE). Permite usar, modificar y distribuir el código, incluso comercialmente, conservando el aviso de copyright y la licencia. Las dependencias y archivos de terceros conservan sus propias licencias.
