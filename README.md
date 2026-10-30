@@ -2,7 +2,7 @@
 
 App Android en Kotlin y microservicio para registrar el historial de llamadas de equipos empresariales y exportarlo a CSV. El servidor usa **Python y SQLite, sin paquetes externos**. La distribución prevista es interna mediante APK o MDM.
 
-**Pruebas en la misma Wi-Fi:** ver [WIFI.md](WIFI.md). Incluye el servidor local sin dominio público, el APK con confianza TLS de depuración y los comandos para CSV individual y conjunto.
+**Instalar en Windows, macOS o Linux por Wi-Fi:** ver [WIFI.md](WIFI.md). Incluye una guía de PowerShell para **Windows sin Docker**, alternativas con Docker, HTTPS local, firewall, compilación del APK y CSV individual y conjunto. El servidor nativo solo necesita Python 3.11+ y Caddy 2; no requiere virtualización.
 
 ## Qué incluye
 
@@ -47,6 +47,8 @@ Usar un JDK actualizado. La verificación final se hizo con JDK 23.0.1; el JBR 1
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
+En PowerShell de Windows, usar `.\gradlew.bat` en lugar de `./gradlew`. Si se instala el APK manualmente, no se necesita ADB. Para un servidor HTTPS local, copiar primero su certificado siguiendo [WIFI.md](WIFI.md#compilar-e-instalar-el-apk); un APK de otra instalación puede no confiar en ese servidor. Para actualizar una app instalada hay que conservar su clave de firma, también al cambiar de PC.
+
 APK de desarrollo: `app/build/outputs/apk/debug/app-debug.apk`. Para distribución definitiva, generar un APK `release` firmado desde Android Studio y conservar la misma clave para futuras actualizaciones. No se incluye una clave de firma de producción.
 
 En el teléfono:
@@ -63,7 +65,7 @@ Para detener la captura, revocar **Registro de llamadas** en los ajustes de Andr
 
 ## Servidor local para desarrollo
 
-Python **3.11 o superior**. Ejecutar desde la raíz del proyecto:
+Python **3.11 o superior**, sin dependencias Python externas. Para instalar el servidor completo por Wi-Fi en Windows **sin Docker**, empezar por [esta guía de PowerShell](WIFI.md#a-windows-sin-docker), que añade Caddy para HTTPS y usa el puerto local 8088. Los siguientes comandos son para Bash/Zsh y arrancan solo la API de desarrollo en 8080, desde la raíz del proyecto:
 
 ```sh
 export CALLLOG_ADMIN_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
@@ -90,7 +92,7 @@ La revocación impide nuevos ingresos y conserva el historial para las exportaci
 
 ## Despliegue con HTTPS
 
-Se incluye Docker Compose con Python y Caddy, que obtiene y renueva el certificado TLS. Hace falta una máquina con Docker, un dominio apuntando a ella y los puertos 80 y 443 accesibles.
+Se incluye Docker Compose con Python y Caddy, que obtiene y renueva el certificado TLS. Esta alternativa con dominio público requiere una máquina con Docker, un dominio apuntando a ella y los puertos 80 y 443 accesibles. Para Wi-Fi sin dominio, con o sin Docker, usar [WIFI.md](WIFI.md).
 
 ```sh
 cp .env.example .env
@@ -177,6 +179,8 @@ python3 -m unittest discover -s server -v
 # Con emulador o teléfono conectado
 ./gradlew :app:connectedDebugAndroidTest
 ```
+
+Equivalentes en PowerShell: `py -3 -m unittest discover -s server -v` y `.\gradlew.bat` para las tareas Gradle.
 
 Las pruebas del servidor cubren credenciales, aislamiento, revocación, reintentos sin duplicados, actualizaciones, validación atómica, límites y ambos CSV. Las pruebas Kotlin cubren contraseña, URL HTTPS y escape CSV. La prueba instrumentada verifica Room, conservación de confirmaciones y rechazo de confirmaciones obsoletas.
 

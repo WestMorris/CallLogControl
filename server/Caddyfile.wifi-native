@@ -1,0 +1,15 @@
+{
+	auto_https disable_redirects
+	default_sni {$CALLLOG_LAN_IP}
+	skip_install_trust
+	admin off
+	storage file_system "{$CALLLOG_TLS_DIR}"
+}
+https://{$CALLLOG_LAN_IP}:8443 {
+	bind {$CALLLOG_LAN_IP}
+	tls internal
+	request_body {
+		max_size 256KB
+	}
+	reverse_proxy 127.0.0.1:8088
+}
