@@ -8,8 +8,11 @@ services:
       - "127.0.0.1:8088:8080"
     environment:
       CALLLOG_ADMIN_TOKEN: ${CALLLOG_ADMIN_TOKEN:?Define CALLLOG_ADMIN_TOKEN en .env.wifi}
+      CALLLOG_PUBLIC_URL: https://${CALLLOG_LAN_IP}:8443
+      CALLLOG_CA_FILE: /tls/root.crt
     volumes:
       - calllog_data:/data
+      - ./local-wifi/public:/tls:ro
     mem_limit: 128m
     cpus: 0.5
     pids_limit: 64

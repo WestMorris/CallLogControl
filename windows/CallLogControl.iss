@@ -41,10 +41,21 @@ Name: "{group}\Desinstalar"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\Administrar CallLog Control"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\windows\Open-Admin.ps1"""
 
 [Run]
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\windows\Open-Admin.ps1"""; Description: "Abrir administracion (copiar clave y abrir panel)"; Flags: postinstall skipifsilent nowait runasoriginaluser
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\windows\Open-Admin.ps1"""; Description: "Abrir administracion (copiar clave y abrir panel)"; Flags: postinstall skipifsilent nowait runasoriginaluser; Check: ServicesReady
 
 [Code]
 var NetworkPage: TInputQueryWizardPage;
+    InstallationFailed: Boolean;
+
+function ServicesReady: Boolean;
+begin
+  Result := not InstallationFailed;
+end;
+
+function GetCustomSetupExitCode: Integer;
+begin
+  if InstallationFailed then Result := 1 else Result := 0;
+end;
 
 function ServiceArgs(Action: String): String;
 begin
@@ -86,8 +97,10 @@ procedure CurStepChanged(CurStep: TSetupStep);
 var ExitCode: Integer;
 begin
   if CurStep = ssPostInstall then
-    if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), ServiceArgs('-LanIP "' + Trim(NetworkPage.Values[0]) + '"'), '', SW_HIDE, ewWaitUntilTerminated, ExitCode) or (ExitCode <> 0) then
+    if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), ServiceArgs('-LanIP "' + Trim(NetworkPage.Values[0]) + '"'), '', SW_HIDE, ewWaitUntilTerminated, ExitCode) or (ExitCode <> 0) then begin
+      InstallationFailed := True;
       RaiseException('No se pudieron iniciar los servicios. Los datos se conservaron. Revisa C:\ProgramData\CallLogControl\setup-error.txt y logs, corrige la causa y vuelve a ejecutar el instalador.');
+    end;
 end;
 
 function InitializeUninstall: Boolean;

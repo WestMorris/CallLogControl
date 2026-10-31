@@ -4,6 +4,8 @@ App Android en Kotlin y microservicio para registrar el historial de llamadas de
 
 **Instalar en Windows, macOS o Linux por Wi-Fi:** ver [WIFI.md](WIFI.md). Incluye una guía de PowerShell para **Windows sin Docker**, alternativas con Docker, HTTPS local, firewall, compilación del APK y CSV individual y conjunto. El servidor nativo solo necesita Python 3.11+ y Caddy 2; no requiere virtualización.
 
+**Windows con asistente:** descargar el `.exe` y el APK genérico de [la versión 1.1.0](https://github.com/WestMorris/CallLogControl/releases/tag/v1.1.0) y seguir [WINDOWS.md](WINDOWS.md). El instalador incluye Python y Caddy, configura servicios y firewall y conserva los datos al actualizar. El alta por QR evita escribir URL o tokens y compilar un APK por servidor.
+
 ## Qué incluye
 
 - Contraseña local creada en el primer inicio, con PBKDF2-HMAC-SHA256, sal aleatoria y espera de 30 segundos tras cinco errores. Se bloquea al abandonar la app. No hay contraseña predeterminada ni recuperación.
@@ -12,6 +14,7 @@ App Android en Kotlin y microservicio para registrar el historial de llamadas de
 - `CallReceiver.kt` programa una importación al terminar la llamada. WorkManager vuelve a consultar el historial aproximadamente cada 15 minutos y al abrir la app desbloqueada.
 - `CallService.kt` hace una importación manual breve con notificación visible. No mantiene un servicio permanente.
 - Panel administrativo local: equipos, llamadas paginadas, filtro por equipo, CSV y solicitudes remotas. Ver [WIFI.md](WIFI.md).
+- Alta desde el panel con nombre y QR de un solo uso, válido cinco minutos. La app 1.1.0 escanea con cámara y configura la URL, la credencial del teléfono y una autoridad TLS limitada a ese servidor, sin instalar certificados en Android.
 - `RemoteSyncService.kt` ofrece un modo opcional de control remoto inmediato por Wi-Fi, con servicio visible, notificación permanente y mayor consumo de batería. Debe activarse en la app y permitir batería sin restricciones.
 - Pantalla de las últimas 200 llamadas, totales globales y pendientes. CSV local con **todos** los registros, guardado mediante el selector de archivos de Android.
 - `SyncWorker.kt` envía lotes de 100 registros por HTTPS, con reintentos y credencial propia por equipo. Nunca borra registros locales tras enviarlos.
@@ -47,7 +50,7 @@ Usar un JDK actualizado. La verificación final se hizo con JDK 23.0.1; el JBR 1
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-En PowerShell de Windows, usar `.\gradlew.bat` en lugar de `./gradlew`. Si se instala el APK manualmente, no se necesita ADB. Para un servidor HTTPS local, copiar primero su certificado siguiendo [WIFI.md](WIFI.md#compilar-e-instalar-el-apk); un APK de otra instalación puede no confiar en ese servidor. Para actualizar una app instalada hay que conservar su clave de firma, también al cambiar de PC.
+En PowerShell de Windows, usar `.\gradlew.bat` en lugar de `./gradlew`. Si se instala el APK manualmente, no se necesita ADB. **El alta QR de 1.1.0 permite usar un APK genérico**, sin incorporar certificados al código. El procedimiento manual de certificados debug sigue disponible en [WIFI.md](WIFI.md#compilar-e-instalar-el-apk). Para actualizar una app instalada hay que conservar su clave de firma, también al cambiar de PC.
 
 APK de desarrollo: `app/build/outputs/apk/debug/app-debug.apk`. Para distribución definitiva, generar un APK `release` firmado desde Android Studio y conservar la misma clave para futuras actualizaciones. No se incluye una clave de firma de producción.
 
@@ -142,6 +145,8 @@ El CSV del servidor contiene `equipo_id`, `equipo`, `llamada_id`, `numero`, `tip
 | `GET /healthz` | Ninguna | `200 {"status":"ok"}` |
 | `POST /v1/calls` | Equipo activo | `204` solo después de persistir todo el lote |
 | `GET /v1/devices` | Administrador | Lista de equipos y conteos |
+| `POST /v1/enrollments` | Administrador | `{"name":"Ventas 01"}` genera un QR con URL, autoridad y código temporal |
+| `POST /v1/enrollments/claim` | Código del QR | Cuerpo `{}`; canje atómico por un teléfono con credencial propia, una sola vez |
 | `GET /v1/calls?device_id=...&offset=0` | Administrador | Página de 50 llamadas; filtro opcional |
 | `POST /v1/devices/{id}/sync` | Administrador | Encola una solicitud y devuelve `202` con `request_id` |
 | `GET /v1/sync-request?wait=25` | Equipo activo | Espera hasta 25 segundos una solicitud pendiente |
@@ -206,4 +211,4 @@ Referencias: [permisos Android](https://developer.android.com/reference/android/
 
 ## Licencia
 
-Este proyecto se distribuye bajo la [licencia MIT](LICENSE). Permite usar, modificar y distribuir el código, incluso comercialmente, conservando el aviso de copyright y la licencia. Las dependencias y archivos de terceros conservan sus propias licencias.
+Este proyecto se distribuye bajo la [licencia MIT](LICENSE). Permite usar, modificar y distribuir el código, incluso comercialmente, conservando el aviso de copyright y la licencia. Las dependencias y archivos de terceros conservan sus propias licencias; ver [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

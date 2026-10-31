@@ -15,6 +15,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.EditText
+import android.widget.CheckBox
 import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -278,8 +279,10 @@ class MainActivity : ComponentActivity() {
         }
         val url = EditText(this).apply { hint = "https://llamadas.empresa.com"; setText(security.endpoint); inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI; maxLines = 1 }
         val token = EditText(this).apply { hint = "Credencial del equipo"; inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD; maxLines = 1; importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO }
+        val keepCertificate = CheckBox(this).apply { text = "Conservar certificado actual al cambiar la IP"; isVisible = security.serverCa != null }
         form.addView(url)
         form.addView(token)
+        form.addView(keepCertificate)
         val currentEpoch = epoch
         dialog = AlertDialog.Builder(this).setTitle("Servidor de la empresa")
             .setMessage("Al guardar se enviará todo el historial local por HTTPS. Usa la credencial propia de este equipo, nunca la de administrador. Deja la credencial vacía para conservar la actual. Cambiar el destino vuelve a enviar todos los registros.")
@@ -297,7 +300,9 @@ class MainActivity : ComponentActivity() {
                                     require(security.validToken(credential))
                                     // Reset before saving: an interrupted change must never skip uploading old rows.
                                     dao.resetSync()
-                                    security.saveCredentials(address, credential)
+                                    security.saveCredentials(address, credential,
+                                        if (keepCertificate.isChecked) security.serverCa else null,
+                                        if (keepCertificate.isChecked) security.deviceName else null)
                                     getSharedPreferences("status", MODE_PRIVATE).edit().remove("sync_error").remove("last_sync").apply()
                                 } }
                                 BackgroundWork.schedule(this@MainActivity)

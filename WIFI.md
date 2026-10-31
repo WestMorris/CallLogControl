@@ -11,11 +11,13 @@ Esta guía permite usar un teléfono Android físico con un servidor en **Window
 
 Después seguir [Conectar Android](#conectar-android), [Panel y CSV](#panel-web-y-exportaciones-csv) y, si se necesita, [Control remoto](#solicitar-sincronización-con-la-app-cerrada).
 
+**Windows: para instalar con pocos pasos, usar el [instalador con servicios automáticos y alta por QR](WINDOWS.md).** Incluye Python y Caddy y configura el firewall. Los pasos de esta página son la alternativa manual para desarrollo o administración avanzada.
+
 ## Qué se va a ejecutar
 
 - **Python + SQLite:** guarda los registros y sirve el panel en `http://127.0.0.1:8088`, accesible desde el propio servidor.
 - **Caddy:** añade HTTPS para el teléfono en `https://IP_DEL_SERVIDOR:8443`. La app requiere HTTPS; arrancar solo Python no basta para conectarla.
-- **APK debug propio:** debe incluir el certificado público de la autoridad de Caddy de **esta instalación**. Un APK compilado para otro servidor puede rechazar su certificado.
+- **App 1.1.0 o posterior:** el alta QR recibe el certificado público de esta instalación; permite usar el mismo APK genérico con distintos servidores. Para el alta manual de versiones anteriores sigue disponible el certificado incluido en un APK debug propio.
 
 En todos los ejemplos, sustituir `192.168.1.100` por la IPv4 real del servidor. PC y teléfono deben poder comunicarse en la misma red; las redes de invitados o el aislamiento de clientes pueden impedirlo. El servidor debe permanecer encendido y sin suspensión. Internet se necesita para descargar herramientas y dependencias; la sincronización local funciona sin Internet.
 
@@ -64,6 +66,8 @@ Get-Content .env.wifi | ForEach-Object {
         [Environment]::SetEnvironmentVariable($matches[1], $matches[2].Trim(), 'Process')
     }
 }
+$env:CALLLOG_PUBLIC_URL = "https://$($env:CALLLOG_LAN_IP):8443"
+$env:CALLLOG_CA_FILE = Join-Path (Get-Location).Path 'local-wifi\caddy\pki\authorities\local\root.crt'
 py -3 server/server.py --data-dir server/data serve --host 127.0.0.1 --port 8088
 ```
 
@@ -110,7 +114,11 @@ py -3 -X utf8 server/server.py --data-dir server/data register-device --name 'Ve
 
 La salud debe devolver `status: ok` y la comprobación del certificado `True`. El JSON contiene `device_id`, `name` y `token`. Conservarlo: el servidor guarda solo el hash del token y no puede recuperarlo. No repetir el registro en cada arranque; cada ejecución crea **otro equipo**. PowerShell escribe este JSON en UTF-8; evitar la redirección `>` de PowerShell 5.1, que genera UTF-16.
 
-### A7. Incluir el certificado en el APK
+### A7. Vincular la app o incluir el certificado manualmente
+
+Con la app **1.1.0 o posterior**, abrir el panel y seguir [el alta por QR](WINDOWS.md#agregar-teléfonos-por-qr). No ejecutar el registro de A6 para ese mismo teléfono si se elige QR: el canje ya lo registra con el nombre elegido en el panel. No hace falta copiar un certificado al código ni compilar el APK. La prueba HTTPS siguiente requiere copiar `ca.crt`, pero no es un requisito del alta QR.
+
+Para conservar la configuración manual o usar una app anterior:
 
 Con Caddy ya iniciado, copiar **solo el certificado público**:
 
@@ -142,10 +150,12 @@ Si el equipo no admite Docker, usar **A**. Para esta alternativa se necesita Doc
 2. Arrancar los contenedores y copiar el certificado:
 
 ```powershell
+New-Item -ItemType Directory -Force local-wifi\public | Out-Null
 docker compose --env-file .env.wifi -f compose.wifi.yaml up -d --build
 New-Item -ItemType Directory -Force app\src\debug\res\raw | Out-Null
 docker compose --env-file .env.wifi -f compose.wifi.yaml cp https:/data/caddy/pki/authorities/local/root.crt app/src/debug/res/raw/calllog_wifi_ca.crt
 Copy-Item app\src\debug\res\raw\calllog_wifi_ca.crt local-wifi\ca.crt
+Copy-Item local-wifi\ca.crt local-wifi\public\root.crt
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 docker compose --env-file .env.wifi -f compose.wifi.yaml exec -T api python server.py register-device --name 'Ventas 01' | Set-Content -Encoding UTF8 local-wifi\telefono.json
 ```
@@ -167,12 +177,13 @@ python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
 Editar `.env.wifi`: poner la IPv4 en `CALLLOG_LAN_IP` y la clave generada en `CALLLOG_ADMIN_TOKEN`, sin comillas ni espacios alrededor de `=`. **No sobrescribir un `.env.wifi` existente.** Después:
 
 ```sh
+mkdir -p local-wifi/public app/src/debug/res/raw
 docker compose --env-file .env.wifi -f compose.wifi.yaml up -d --build
-mkdir -p local-wifi app/src/debug/res/raw
 chmod 700 local-wifi
 docker compose --env-file .env.wifi -f compose.wifi.yaml cp \
   https:/data/caddy/pki/authorities/local/root.crt app/src/debug/res/raw/calllog_wifi_ca.crt
 cp app/src/debug/res/raw/calllog_wifi_ca.crt local-wifi/ca.crt
+cp local-wifi/ca.crt local-wifi/public/root.crt
 docker compose --env-file .env.wifi -f compose.wifi.yaml exec -T api \
   python server.py register-device --name 'Ventas 01' > local-wifi/telefono.json
 chmod 600 local-wifi/telefono.json
@@ -192,6 +203,8 @@ chmod 700 local-wifi
 set -a
 . ./.env.wifi
 set +a
+export CALLLOG_PUBLIC_URL="https://${CALLLOG_LAN_IP}:8443"
+export CALLLOG_CA_FILE="$PWD/local-wifi/caddy/pki/authorities/local/root.crt"
 python3 server/server.py --data-dir server/data serve --host 127.0.0.1 --port 8088
 ```
 
@@ -218,7 +231,9 @@ Permitir TCP 8443 desde la LAN en el firewall y seguir la compilación. Para det
 
 ## Compilar e instalar el APK
 
-Este paso es común a todas las opciones. El archivo `app/src/debug/res/raw/calllog_wifi_ca.crt` debe existir **antes de compilar**. En una copia limpia de GitHub no está: es propio de cada servidor. Sin él, la app compila pero solo confía en autoridades del sistema y rechazará este HTTPS local. La variante `release` no incluye esta confianza de depuración.
+**Con QR no es necesario compilar:** descargar el APK genérico 1.1.0 de [la entrega](https://github.com/WestMorris/CallLogControl/releases/tag/v1.1.0), instalar y vincular desde el panel. Si se compila desde el código, también puede usarse QR sin incorporar ningún certificado al APK, incluso en una variante `release` firmada por el administrador.
+
+Para la **configuración manual con una autoridad local**, el archivo `app/src/debug/res/raw/calllog_wifi_ca.crt` debe existir antes de compilar. En una copia limpia de GitHub no está: es propio de cada servidor. Sin él y sin alta QR, la app solo confía en autoridades del sistema y rechazará este HTTPS local. La variante `release` no incluye esa confianza de depuración; sí permite la confianza específica configurada mediante QR.
 
 1. Abrir el proyecto en Android Studio y dejar que configure `local.properties` con la ruta del SDK de **ese PC**. No copiar ese archivo desde macOS a Windows.
 2. En SDK Manager, instalar **Android SDK Platform 36** y **Build Tools 35.0.0** y aceptar sus licencias. Usar un JDK compatible con Gradle 8.13, versión 17 o superior (por ejemplo, 21). Configurar también `JAVA_HOME` si se compila desde una PowerShell externa a Android Studio.
@@ -236,13 +251,17 @@ macOS/Linux:
 ./gradlew :app:assembleDebug --max-workers=2
 ```
 
-El APK queda en `app/build/outputs/apk/debug/app-debug.apk` (versión actual **1.0.3**). Transferirlo al teléfono e instalarlo manualmente. Autorizar la instalación desde esa fuente cuando Android lo solicite. Referencia: [compilación por línea de comandos Android](https://developer.android.com/build/building-cmdline).
+El APK queda en `app/build/outputs/apk/debug/app-debug.apk` (versión actual **1.1.0**). Transferirlo al teléfono e instalarlo manualmente. Autorizar la instalación desde esa fuente cuando Android lo solicite. Referencia: [compilación por línea de comandos Android](https://developer.android.com/build/building-cmdline).
 
 **Actualizaciones desde otro PC:** Android exige la misma clave de firma. Cada PC suele generar su propio `debug.keystore`; un APK compilado en Windows puede no instalarse encima del anterior compilado en macOS. Conservar y usar la clave original de forma privada para actualizar sin borrar datos. No desinstalar como primer recurso: elimina el historial local y la configuración. Antes de una reinstalación deliberada, sincronizar y exportar lo necesario. Actualizar solo la app no traslada al nuevo servidor los registros que ya estaban en el anterior.
 
 El certificado público y los archivos privados de instalación están excluidos de Git. No hace falta instalar una autoridad en los ajustes del teléfono ni aceptar certificados inválidos. Un navegador sin esta autoridad puede mostrar un aviso en la URL HTTPS aunque el APK propio funcione correctamente.
 
 ## Conectar Android
+
+La vía recomendada es [generar un QR y escanearlo desde la app](WINDOWS.md#agregar-teléfonos-por-qr). En Docker, copiar el certificado público a `local-wifi/public/root.crt` como se indica arriba y actualizar el servicio con el `compose.wifi.yaml` nuevo. La API recibe solo esa carpeta pública, sin las claves privadas de Caddy. En la instalación nativa manual, los bloques de arranque ya configuran la URL y la ruta de la autoridad para generar QR.
+
+Para conservar el alta manual con JSON y token:
 
 1. Abrir la app y crear o introducir la contraseña local.
 2. Pulsar **Autorizar acceso al historial**, aceptar el aviso y los permisos, y pulsar **Actualizar**. Se importa el historial disponible; no se graba audio.
@@ -312,7 +331,7 @@ Funciona tanto con Python nativo como con Docker. Mantiene una conexión HTTPS d
 
 ## Añadir y revocar equipos
 
-No hace falta crear un servidor ni otro APK por cada teléfono: los que usan el mismo servidor pueden compartir el APK y su certificado, pero **cada uno debe tener su token**. El nombre del registro permite distinguirlos en el panel y los CSV. La interfaz actual no permite dar de alta ni renombrar equipos; el nombre se asigna desde la terminal.
+No hace falta crear un servidor ni otro APK por cada teléfono: los que usan el mismo servidor pueden compartir el APK y su certificado, pero **cada uno debe tener su token**. El nombre del registro permite distinguirlos en el panel y los CSV. La interfaz permite dar de alta desde **Agregar teléfono por QR**. El nombre se elige allí o desde la terminal; todavía no hay renombrado de equipos.
 
 Windows sin Docker (guardar cada JSON con nombre distinto):
 
@@ -364,7 +383,7 @@ Una instalación nueva sin esos datos crea una base y una autoridad distintas. *
 
 1. Editar `CALLLOG_LAN_IP` en `.env.wifi`.
 2. Sin Docker, detener Caddy y repetir su bloque de arranque, que vuelve a leer la IP. Python puede seguir ejecutándose. Con Docker, ejecutar `docker compose --env-file .env.wifi -f compose.wifi.yaml up -d`.
-3. Cambiar la URL en **Servidor** de la app y guardar. Si se mantiene un campo `server_url` adicional en algún JSON privado, actualizarlo también.
+3. Cambiar la URL en **Servidor** de la app y guardar. Si se vinculó por QR, marcar **Conservar certificado actual al cambiar la IP** y dejar la credencial vacía para mantener el mismo equipo. Si se mantiene un campo `server_url` adicional en algún JSON privado, actualizarlo también.
 
 Caddy emitirá un certificado para la nueva IP. Si se conserva la misma autoridad (`local-wifi/caddy` o el volumen de Caddy), **no hace falta recompilar el APK**. Si se pierde o recrea esa autoridad, copiar el nuevo `root.crt`, recompilar y actualizar el APK conservando su firma. Reservar la IP en el router evita este cambio habitual.
 

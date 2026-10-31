@@ -39,7 +39,8 @@ def csv_cell(value):
 class Store:
     def __init__(self, directory):
         directory = Path(directory)
-        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        # Windows must inherit the protected parent ACL, including LocalService access.
+        directory.mkdir(parents=True, exist_ok=True, mode=0o777 if os.name == "nt" else 0o700)
         self.path = directory / "calls.sqlite3"
         with self.connect() as db:
             db.executescript("""

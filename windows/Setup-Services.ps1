@@ -85,6 +85,7 @@ try {
             & $wrapper install
             if ($LASTEXITCODE -ne 0) { throw "No se pudo instalar $name" }
         }
+        Set-Service -Name $name -StartupType Automatic
         & $wrapper start
         if ($LASTEXITCODE -ne 0) { throw "No se pudo iniciar $name" }
     }
@@ -101,6 +102,12 @@ try {
     if (-not $healthy) { throw 'Los servicios no quedaron disponibles. Revisa los logs en ProgramData\CallLogControl\logs.' }
     Remove-Item (Join-Path $dataDir 'setup-error.txt') -ErrorAction SilentlyContinue
 } catch {
+    foreach ($name in $serviceNames) {
+        if (Get-Service -Name $name -ErrorAction SilentlyContinue) {
+            Set-Service -Name $name -StartupType Disabled -ErrorAction SilentlyContinue
+            Stop-Service -Name $name -Force -ErrorAction SilentlyContinue
+        }
+    }
     $_.Exception.Message | Set-Content -Encoding UTF8 (Join-Path $dataDir 'setup-error.txt')
     Write-Error $_
     exit 1

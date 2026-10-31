@@ -17,6 +17,8 @@ function Verify-Existing {
     if ($LASTEXITCODE -ne 0) { throw 'No se conservaron los datos o el servicio no responde.' }
 }
 try {
+    $invalid = Start-Process -FilePath $SetupPath -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/LANIP=192.0.2.254') -Wait -PassThru
+    if ($invalid.ExitCode -eq 0) { throw 'La instalacion fallida no devolvio un error.' }
     Install-Server
     Check-Services
     $configBefore = Get-FileHash (Join-Path $dataDir 'config.json')
