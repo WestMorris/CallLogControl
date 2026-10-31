@@ -108,6 +108,11 @@ En otra PowerShell, desde la raíz del proyecto:
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8088/healthz
 Test-Path local-wifi\caddy\pki\authorities\local\root.crt
+```
+
+Si se usará QR, pasar a A7: no hace falta registrar el equipo por terminal. Para el alta manual con JSON, ejecutar:
+
+```powershell
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 py -3 -X utf8 server/server.py --data-dir server/data register-device --name 'Ventas 01' | Set-Content -Encoding UTF8 local-wifi\telefono.json
 ```
@@ -184,6 +189,8 @@ docker compose --env-file .env.wifi -f compose.wifi.yaml cp \
   https:/data/caddy/pki/authorities/local/root.crt app/src/debug/res/raw/calllog_wifi_ca.crt
 cp app/src/debug/res/raw/calllog_wifi_ca.crt local-wifi/ca.crt
 cp local-wifi/ca.crt local-wifi/public/root.crt
+chmod 755 local-wifi/public
+chmod 644 local-wifi/public/root.crt
 docker compose --env-file .env.wifi -f compose.wifi.yaml exec -T api \
   python server.py register-device --name 'Ventas 01' > local-wifi/telefono.json
 chmod 600 local-wifi/telefono.json

@@ -104,6 +104,6 @@ La automatización [Windows installer](https://github.com/WestMorris/CallLogCont
 
 ## Verificación de esta entrega
 
-El instalador se compiló e instaló en un runner **Windows Server 2022 x64** de GitHub Actions. Se verificaron quince pruebas de API/configuración y la instalación, recuperación ante caída, actualización y desinstalación/reinstalación de los servicios conservando llamadas, clave administrativa y autoridad. El tipo de inicio automático se comprobó en Windows; no se reinició físicamente el runner.
+El instalador se compiló e instaló en un runner **Windows Server 2022 x64** de GitHub Actions; [ejecución verificada](https://github.com/WestMorris/CallLogControl/actions/runs/41160377074). Se verificaron quince pruebas de API/configuración y la instalación, recuperación ante caída, actualización y desinstalación/reinstalación de los servicios conservando llamadas, clave administrativa y autoridad. El tipo de inicio automático se comprobó en Windows; no se reinició físicamente el runner.
 
 La app pasó tres pruebas unitarias, Lint sin errores y cinco pruebas instrumentadas en Android 14, incluyendo decodificación del QR real generado por la API, canje único, envío por TLS con autoridad específica y rechazo de una autoridad y un nombre de servidor incorrectos. No se probó la cámara de un teléfono físico ni una instalación interactiva en Windows 10/11; comprobar esos dos pasos en los equipos de destino.
