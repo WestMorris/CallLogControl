@@ -193,7 +193,9 @@ Ejecutar las pruebas instrumentadas en un **emulador dedicado sin datos reales**
 
 Validar en cada modelo de teléfono: una llamada entrante, saliente, perdida y rechazada; llamadas seguidas; reinicio; modo avión y recuperación; permiso revocado; credencial revocada; app bloqueada; exportación. Las pruebas de emulador no sustituyen las llamadas reales.
 
-Verificación realizada el **30/10/2026**: APK debug compilado, pruebas Kotlin y Lint sin errores. Las 11 pruebas HTTP cubren también el panel, la paginación, migración de la base, aislamiento de comandos, confirmaciones y respuesta del canal remoto. El servidor Docker preservó los 19 registros existentes tras actualizar. Se verificaron filtro, solicitud y ambos CSV desde el navegador con datos ficticios. Una solicitud real por HTTPS se completó en **0,756 segundos**, con la actividad Android cerrada y Doze forzado en un emulador Android 14 con excepción de batería. La velocidad y continuidad del modo remoto deben validarse en el teléfono físico.
+Verificación realizada el **30/10/2026**: APK debug compilado, pruebas Kotlin y Lint sin errores. Las pruebas HTTP cubren también el panel, la paginación, migración de la base, aislamiento de comandos, confirmaciones y respuesta del canal remoto. El servidor Docker preservó los 19 registros existentes tras actualizar. Se verificaron filtro, solicitud y ambos CSV desde el navegador con datos ficticios. Una solicitud real por HTTPS se completó en **0,756 segundos**, con la actividad Android cerrada y Doze forzado en un emulador Android 14 con excepción de batería. La velocidad y continuidad del modo remoto deben validarse en el teléfono físico.
+
+La entrega **1.1.0** añade quince pruebas de servidor/configuración, instalación y ciclo de vida real de los servicios en Windows Server 2022 y cinco pruebas instrumentadas Android, incluyendo QR y TLS por servidor. Detalles y límites de verificación en [WINDOWS.md](WINDOWS.md#verificación-de-esta-entrega).
 
 ## Restricciones y protección de datos
 

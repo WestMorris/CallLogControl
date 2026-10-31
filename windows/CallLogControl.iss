@@ -43,6 +43,10 @@ Name: "{autodesktop}\Administrar CallLog Control"; Filename: "{sys}\WindowsPower
 [Run]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\windows\Open-Admin.ps1"""; Description: "Abrir administracion (copiar clave y abrir panel)"; Flags: postinstall skipifsilent nowait runasoriginaluser; Check: ServicesReady
 
+[UninstallDelete]
+Type: files; Name: "{app}\CallLogControlAPI.xml"
+Type: files; Name: "{app}\CallLogControlHTTPS.xml"
+
 [Code]
 var NetworkPage: TInputQueryWizardPage;
     InstallationFailed: Boolean;
@@ -101,6 +105,14 @@ begin
       InstallationFailed := True;
       RaiseException('No se pudieron iniciar los servicios. Los datos se conservaron. Revisa C:\ProgramData\CallLogControl\setup-error.txt y logs, corrige la causa y vuelve a ejecutar el instalador.');
     end;
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if (CurPageID = wpFinished) and InstallationFailed then begin
+    WizardForm.FinishedHeadingLabel.Caption := 'El servidor necesita reparacion';
+    WizardForm.FinishedLabel.Caption := 'No se pudieron iniciar los servicios. Los datos se conservaron. Revisa setup-error.txt en ProgramData\CallLogControl y vuelve a ejecutar el instalador despues de corregir la causa.';
+  end;
 end;
 
 function InitializeUninstall: Boolean;

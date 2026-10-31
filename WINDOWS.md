@@ -101,3 +101,9 @@ Para quienes desarrollan el proyecto: en Windows con PowerShell, instalar **Inno
 Descarga las versiones fijadas y verifica sus SHA-256, empaqueta el runtime Python embebido, Caddy, WinSW, servidor y licencias y produce `build/windows/CallLogControl-Setup-1.1.0-x64.exe`. El usuario final no necesita estas herramientas. No incluye bases de datos, credenciales ni la instalación local del desarrollador.
 
 La automatización [Windows installer](https://github.com/WestMorris/CallLogControl/actions/workflows/windows-installer.yml) compila el ejecutable en Windows y prueba instalación, HTTPS, QR, CSV, recuperación de un fallo, actualización y desinstalación/reinstalación conservando datos y autoridad. El APK se compila aparte; ver [README.md](README.md#compilar-e-instalar-android). Componentes y licencias: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Verificación de esta entrega
+
+El instalador se compiló e instaló en un runner **Windows Server 2022 x64** de GitHub Actions. Se verificaron quince pruebas de API/configuración y la instalación, recuperación ante caída, actualización y desinstalación/reinstalación de los servicios conservando llamadas, clave administrativa y autoridad. El tipo de inicio automático se comprobó en Windows; no se reinició físicamente el runner.
+
+La app pasó tres pruebas unitarias, Lint sin errores y cinco pruebas instrumentadas en Android 14, incluyendo decodificación del QR real generado por la API, canje único, envío por TLS con autoridad específica y rechazo de una autoridad y un nombre de servidor incorrectos. No se probó la cámara de un teléfono físico ni una instalación interactiva en Windows 10/11; comprobar esos dos pasos en los equipos de destino.

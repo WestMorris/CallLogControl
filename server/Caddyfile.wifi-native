@@ -3,6 +3,7 @@
 	default_sni {$CALLLOG_LAN_IP}
 	skip_install_trust
 	admin off
+	persist_config off
 	storage file_system "{$CALLLOG_TLS_DIR}"
 }
 https://{$CALLLOG_LAN_IP}:8443 {

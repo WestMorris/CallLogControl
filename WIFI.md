@@ -382,10 +382,10 @@ Una instalación nueva sin esos datos crea una base y una autoridad distintas. *
 ### Si cambia la IP del servidor
 
 1. Editar `CALLLOG_LAN_IP` en `.env.wifi`.
-2. Sin Docker, detener Caddy y repetir su bloque de arranque, que vuelve a leer la IP. Python puede seguir ejecutándose. Con Docker, ejecutar `docker compose --env-file .env.wifi -f compose.wifi.yaml up -d`.
+2. Sin Docker, reiniciar Python y Caddy repitiendo sus bloques de arranque para que ambos lean la nueva IP, también al generar QR. Con Docker, ejecutar `docker compose --env-file .env.wifi -f compose.wifi.yaml up -d`.
 3. Cambiar la URL en **Servidor** de la app y guardar. Si se vinculó por QR, marcar **Conservar certificado actual al cambiar la IP** y dejar la credencial vacía para mantener el mismo equipo. Si se mantiene un campo `server_url` adicional en algún JSON privado, actualizarlo también.
 
-Caddy emitirá un certificado para la nueva IP. Si se conserva la misma autoridad (`local-wifi/caddy` o el volumen de Caddy), **no hace falta recompilar el APK**. Si se pierde o recrea esa autoridad, copiar el nuevo `root.crt`, recompilar y actualizar el APK conservando su firma. Reservar la IP en el router evita este cambio habitual.
+Caddy emitirá un certificado para la nueva IP. Si se conserva la misma autoridad (`local-wifi/caddy` o el volumen de Caddy), **no hace falta recompilar el APK**. Si se pierde o recrea esa autoridad, con QR hay que volver a vincular (se crea otro equipo y el historial anterior permanece en el servidor); con configuración manual hay que actualizar la confianza del certificado. Reservar la IP en el router evita este cambio habitual.
 
 ## Diagnóstico
 

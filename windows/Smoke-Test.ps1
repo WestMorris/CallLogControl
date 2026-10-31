@@ -48,6 +48,7 @@ try {
         if (Get-Service -Name $name -ErrorAction SilentlyContinue) { throw 'Quedo un servicio instalado.' }
     }
     if (-not (Test-Path (Join-Path $dataDir 'data\calls.sqlite3'))) { throw 'La desinstalacion borro la base.' }
+    if (Test-Path (Join-Path $installDir 'CallLogControlAPI.xml')) { throw 'Quedo la configuracion del servicio dentro de Program Files.' }
     if (Get-NetFirewallRule -Name CallLogControl-Installer-8443 -ErrorAction SilentlyContinue) { throw 'Quedo la regla de firewall.' }
     Install-Server
     Verify-Existing
