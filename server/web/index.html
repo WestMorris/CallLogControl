@@ -6,40 +6,79 @@
   <link rel="stylesheet" href="/panel.css"><script src="/panel.js" defer></script>
 </head>
 <body>
-  <header><a class="brand" href="/">↗ <span>CallLog Control<small>ADMINISTRACIÓN DE EQUIPOS</small></span></a><button id="logout" hidden>Salir</button></header>
-  <main>
-    <section id="login" class="login card">
-      <span class="eyebrow">ACCESO AL SERVIDOR</span><h1>El historial de tu flota.</h1>
-      <p>Consulta llamadas, exporta los registros y solicita una actualización desde un solo lugar.</p>
-      <form id="login-form"><label for="admin-key">Credencial de administrador</label><input id="admin-key" type="password" required autocomplete="off" spellcheck="false" placeholder="Pega la clave de CALLLOG_ADMIN_TOKEN"><button class="primary" type="submit">Entrar al panel</button></form>
-      <p class="note">Con el instalador Windows, abre «Administrar CallLog Control» desde el menú Inicio para copiar la clave. En instalaciones manuales está en <code>.env.wifi</code>. La credencial del teléfono no permite administrar. La sesión termina al salir o recargar.</p>
-    </section>
-    <div id="workspace" hidden>
-      <div class="intro"><div><span class="eyebrow">VISTA GENERAL</span><h1>Actividad de tus equipos</h1><p>Registros recibidos por el servidor, con su equipo de origen.</p></div><button id="refresh">Actualizar vista</button></div>
-      <div class="metrics"><section class="card"><span>Equipos registrados</span><strong id="device-count">0</strong></section><section class="card"><span>Llamadas recibidas</span><strong id="call-count">0</strong></section><section class="card"><span>Solicitudes pendientes</span><strong id="request-count">0</strong></section></div>
-      <section class="card"><h2>Agregar teléfono por QR</h2><p>Asigna un nombre y escanea el código desde la app. Cada QR sirve una sola vez y vence a los cinco minutos.</p>
-        <form id="enrollment-form" class="actions"><label for="enrollment-name">Nombre del equipo</label><input id="enrollment-name" required maxlength="120" placeholder="Ventas 01" autocomplete="off"><button id="enrollment-create" class="primary" type="submit">Generar QR</button></form>
-      </section>
-      <section class="card"><div class="section-head"><div><h2>Equipos</h2><p>Solicitar sincronización deja una petición pendiente hasta que la app contacte al servidor.</p></div></div>
-        <div class="table-wrap"><table><thead><tr><th>Equipo</th><th>Llamadas</th><th>Último contacto</th><th>Última sincronización</th><th>Solicitud</th><th>Acciones</th></tr></thead><tbody id="devices"></tbody></table></div>
-        <p class="note">Para responder en segundos, activa Control remoto en la app y permite batería sin restricciones. Funciona con notificación permanente y mayor consumo. Sin ese modo, el contacto periódico puede tardar 15 minutos o más. El equipo debe poder acceder al servidor por Wi‑Fi.</p>
-      </section>
-      <section class="card"><div class="section-head"><div><h2>Historial de llamadas</h2><p id="result-summary">Cargando…</p></div><div class="actions"><button id="export-selected">CSV de la vista</button><button id="export-all" class="primary">CSV conjunto</button></div></div>
-        <form id="date-filter-form" class="filters" aria-describedby="filter-help">
-          <div class="filter-field"><label for="device-filter">Equipo</label><select id="device-filter"><option value="">Todos los equipos</option></select></div>
-          <div class="filter-field"><label for="date-from">Desde</label><input id="date-from" type="date" min="1970-01-01" max="2099-12-31"></div>
-          <div class="filter-field"><label for="date-until">Hasta</label><input id="date-until" type="date" min="1970-01-01" max="2099-12-31"></div>
-          <button type="submit">Aplicar fechas</button><button id="clear-dates" type="button">Limpiar fechas</button>
-        </form>
-        <p id="filter-help" class="note filter-help">Hasta incluye todo el día. CSV de la vista exporta todos los registros del equipo y las fechas aplicadas. CSV conjunto y los botones CSV de cada equipo exportan su historial completo, sin filtro de fechas.</p>
-        <div class="table-wrap"><table><thead><tr><th>Equipo</th><th>Número</th><th>SIM / línea</th><th>Tipo</th><th>Inicio</th><th>Duración</th></tr></thead><tbody id="calls"></tbody></table></div>
-        <div class="pagination"><div class="page-size"><label for="page-size">Registros por página</label><select id="page-size"><option value="25">25</option><option value="50" selected>50</option><option value="100">100</option><option value="200">200</option></select></div><div class="page-navigation"><button id="previous" disabled>Anterior</button><span id="page-info" role="status" aria-live="polite"></span><button id="next" disabled>Siguiente</button></div></div>
-      </section>
-      <p class="note">Los equipos con prefijo [PRUEBA] contienen datos ficticios y también aparecen en el CSV conjunto. Las fechas y los filtros del panel usan la zona horaria de este navegador; el CSV usa la del servidor e incluye su desplazamiento UTC.</p>
-    </div>
-    <p id="message" role="status" aria-live="polite"></p>
-    <dialog id="enrollment-dialog" aria-labelledby="enrollment-title"><h2 id="enrollment-title">Alta del teléfono</h2><p id="enrollment-info"></p><img id="enrollment-qr" alt="Código QR de alta, privado y de un solo uso"><p class="note">En la app desbloqueada pulsa «Vincular por QR». Escanea únicamente el QR del servidor de tu empresa. No compartas este código.</p><button id="enrollment-close">Cerrar</button></dialog>
+  <header id="login-header" class="login-header"><a class="brand" href="#resumen">CallLog Control</a></header>
+  <main id="login" class="login">
+    <h1>El historial de tu flota.</h1>
+    <p>Consulta llamadas, exporta los registros y solicita una actualización desde un solo lugar.</p>
+    <form id="login-form"><label for="admin-key">Credencial de administrador</label><input id="admin-key" type="password" required autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Pega la clave de CALLLOG_ADMIN_TOKEN"><button class="primary" type="submit">Entrar al panel</button></form>
+    <p class="note">Con el instalador Windows, abre «Administrar CallLog Control» desde el menú Inicio para copiar la clave. En instalaciones manuales está en <code>.env.wifi</code>. La credencial del teléfono no permite administrar. La sesión termina al salir o recargar.</p>
   </main>
-  <footer>CallLog Control · Servidor local de la empresa</footer>
+  <div id="workspace" class="shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="#resumen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3H4a1 1 0 0 0-1 1c0 9.4 7.6 17 17 17a1 1 0 0 0 1-1v-3l-5-2-2 2a14 14 0 0 1-7-7l2-2-2-5Z"/><path d="M15 3a6 6 0 0 1 6 6m-6-2a2 2 0 0 1 2 2"/></svg>CallLog Control</a>
+      <nav aria-label="Menú principal">
+        <a id="nav-summary" class="navitem" href="#resumen" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>Resumen</a>
+        <a id="nav-devices" class="navitem" href="#equipos"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/></svg>Equipos</a>
+        <a id="nav-calls" class="navitem" href="#llamadas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h1M3 12h1M3 18h1"/></svg>Llamadas</a>
+      </nav>
+      <div class="aside-foot"><a id="nav-help" class="text-link" href="#ayuda">Ayuda y soporte</a><p>Servidor de la empresa<br>Red local · Wi-Fi</p></div>
+    </aside>
+    <div class="main-area">
+      <header class="topbar"><span id="breadcrumb">Plataforma / Resumen</span><div class="actions"><button id="refresh">Actualizar vista</button><button id="logout">Salir</button></div></header>
+      <main class="content">
+        <section id="summary-view" aria-labelledby="summary-title">
+          <div class="heading"><div><h1 id="summary-title" tabindex="-1">Resumen</h1><p>El estado de tus equipos, de un vistazo.</p></div></div>
+          <dl class="metrics"><div><dt>Equipos registrados</dt><dd id="device-count">0</dd></div><div><dt>Activos con contacto en 30 minutos</dt><dd id="recent-contact-count">0 de 0</dd></div><div><dt>Llamadas recibidas</dt><dd id="call-count">0</dd></div><div><dt>Solicitudes pendientes en activos</dt><dd id="request-count">0</dd></div></dl>
+          <p class="note revoked-note">Equipos revocados: <strong id="revoked-count">0</strong>. Conservan su historial y no reciben nuevas sincronizaciones.</p>
+          <h2>Requiere atención</h2><p class="note">Equipos activos sin contacto durante más de 30 minutos o que aún no han contactado. Este umbral no confirma que estén desconectados.</p>
+          <div id="attention-list" class="attention-list"></div>
+          <div class="section-head"><h2>Actividad reciente</h2><a class="text-link" href="#llamadas">Ver todas las llamadas</a></div>
+          <p class="note section-note">Últimas cinco llamadas recibidas de todos los equipos, sin aplicar los filtros de Llamadas.</p>
+          <div class="table-wrap"><table><thead><tr><th>Equipo</th><th>SIM / línea</th><th>Última llamada</th><th>Duración</th></tr></thead><tbody id="recent-calls"></tbody></table></div>
+        </section>
+        <section id="devices-view" aria-labelledby="devices-title" hidden>
+          <div class="heading"><div><h1 id="devices-title" tabindex="-1">Equipos</h1><p>Teléfonos vinculados y estado de sincronización.</p></div><button id="add-device" class="primary">Agregar teléfono</button></div>
+          <section id="enrollment-section" class="enroll" hidden>
+            <h2>Agregar teléfono por QR</h2><p>Asigna un nombre y escanea el código desde la app. Cada QR sirve una sola vez y vence a los cinco minutos.</p>
+            <form id="enrollment-form"><div class="filter-field"><label for="enrollment-name">Nombre del equipo</label><input id="enrollment-name" required maxlength="120" placeholder="Por ejemplo, Ventas 02" autocomplete="off"></div><div class="actions"><button id="enrollment-create" class="primary" type="submit">Generar QR</button><button id="enrollment-cancel" type="button">Cancelar</button></div></form>
+          </section>
+          <div class="table-wrap"><table><thead><tr><th>Equipo</th><th>Llamadas</th><th>Último contacto</th><th>Última sincronización</th><th>Solicitud</th><th>Acciones</th></tr></thead><tbody id="devices"></tbody></table></div>
+          <p class="note">Solicitar sincronización deja una petición pendiente hasta que la app contacte al servidor. Para responder en segundos, activa Control remoto en Android y permite batería sin restricciones. Ese modo mantiene una notificación y consume más batería. Sin él, el contacto periódico puede tardar 15 minutos o más.</p>
+        </section>
+        <section id="device-detail-view" aria-labelledby="detail-name" hidden>
+          <a id="detail-back" class="text-link" href="#equipos">Volver a Equipos</a>
+          <div class="heading detail-heading"><div><h1 id="detail-name" tabindex="-1">Detalle del equipo</h1><p id="detail-id" class="device-id"></p></div><div class="actions"><button id="detail-history" class="primary" disabled>Ver historial</button><button id="detail-export" disabled>CSV del equipo</button></div></div>
+          <dl class="detail-facts"><div><dt>Último contacto</dt><dd id="detail-contact">Cargando…</dd></div><div><dt>Última sincronización</dt><dd id="detail-sync">Cargando…</dd></div><div><dt>Llamadas recibidas</dt><dd id="detail-call-count">—</dd></div><div><dt>Estado de la solicitud</dt><dd id="detail-status">Cargando…</dd></div></dl>
+          <div class="section-head"><h2>Sincronización</h2><button id="detail-sync-request" disabled>Solicitar sincronización</button></div><p id="detail-request" class="note"></p>
+          <p class="note">La solicitud se ejecuta cuando la app contacte al servidor. El control remoto inmediato requiere activación y permisos en el teléfono.</p>
+          <h2 class="subsection">SIM y líneas registradas</h2><p class="note">Cuentas identificadas en las llamadas recibidas. No es un inventario de las SIM instaladas actualmente.</p><ul id="detail-lines" class="line-list"></ul>
+        </section>
+        <section id="calls-view" aria-labelledby="calls-title" hidden>
+          <div class="heading"><div><h1 id="calls-title" tabindex="-1">Llamadas</h1><p id="result-summary">Cargando…</p></div><div class="actions"><button id="export-selected" class="primary">CSV de la vista</button><button id="export-all">CSV conjunto</button></div></div>
+          <form id="date-filter-form" class="filters" aria-describedby="filter-help">
+            <div class="filter-field"><label for="device-filter">Equipo</label><select id="device-filter"><option value="">Todos los equipos</option></select></div>
+            <div class="filter-field"><label for="line-filter">SIM / línea</label><select id="line-filter"><option value="">Todas las líneas</option></select></div>
+            <div class="filter-field"><label for="date-from">Desde</label><input id="date-from" type="date" min="1970-01-01" max="2099-12-31"></div>
+            <div class="filter-field"><label for="date-until">Hasta</label><input id="date-until" type="date" min="1970-01-01" max="2099-12-31"></div>
+            <button type="submit">Aplicar fechas</button><button id="clear-dates" type="button">Limpiar fechas</button>
+          </form>
+          <p id="filter-help" class="note filter-help">Hasta incluye todo el día. CSV de la vista exporta todas las páginas del equipo, la SIM y las fechas aplicadas. CSV conjunto y los botones CSV de cada equipo exportan su historial completo, sin estos filtros.</p>
+          <div class="table-wrap"><table><thead><tr><th>Equipo</th><th>Número</th><th>SIM / línea</th><th>Tipo</th><th>Inicio</th><th>Duración</th></tr></thead><tbody id="calls"></tbody></table></div>
+          <div class="pagination"><div class="page-size"><label for="page-size">Registros por página</label><select id="page-size"><option value="25">25</option><option value="50" selected>50</option><option value="100">100</option><option value="200">200</option></select></div><div class="page-navigation"><button id="previous" disabled>Anterior</button><span id="page-info" role="status" aria-live="polite"></span><button id="next" disabled>Siguiente</button></div></div>
+          <p class="note">Las fechas y los filtros del panel usan la zona horaria de este navegador; el CSV usa la del servidor e incluye su desplazamiento UTC. Los equipos con prefijo [PRUEBA] contienen datos ficticios y también aparecen en el CSV conjunto.</p>
+        </section>
+        <section id="help-view" class="help" aria-labelledby="help-title" hidden>
+          <h1 id="help-title" tabindex="-1">Ayuda y soporte</h1>
+          <h2>Vincular un teléfono</h2><p>En Equipos, pulsa Agregar teléfono y genera un QR con su nombre. Desde la app Android desbloqueada, pulsa Vincular por QR y escanea únicamente el QR del servidor de tu empresa.</p>
+          <h2>Consultar y exportar llamadas</h2><p>En Llamadas, selecciona equipo, SIM y fechas. Aplica las fechas antes de exportar. CSV de la vista incluye todas las páginas de la selección; CSV conjunto incluye todo el historial recibido.</p>
+          <h2>Un equipo no responde</h2><p>Abre su detalle para revisar el último contacto, la última sincronización y las solicitudes. Más de 30 minutos sin contacto indica atención, no una desconexión confirmada. Comprueba Wi-Fi, permisos y restricciones de batería en Android.</p>
+          <h2>Conservar la vinculación</h2><p>Esta navegación no modifica los teléfonos ni sus credenciales. No borres los datos de Android ni la carpeta de datos del servidor para resolver un problema. Los certificados, claves y registros se conservan durante las actualizaciones indicadas en la guía de instalación.</p>
+        </section>
+      </main>
+      <footer>CallLog Control · Servidor local de la empresa</footer>
+    </div>
+  </div>
+  <p id="message" role="status" aria-live="polite"></p>
+  <dialog id="enrollment-dialog" aria-labelledby="enrollment-title"><h2 id="enrollment-title">Alta del teléfono</h2><p id="enrollment-info"></p><div id="enrollment-qr" hidden></div><p class="note">En la app desbloqueada pulsa «Vincular por QR». Escanea únicamente el QR del servidor de tu empresa. No compartas este código.</p><button id="enrollment-close">Cerrar</button></dialog>
 </body>
 </html>

@@ -4,7 +4,7 @@ App Android en Kotlin y microservicio para registrar el historial de llamadas de
 
 **Instalar en Windows, macOS o Linux por Wi-Fi:** ver [WIFI.md](WIFI.md). Incluye una guía de PowerShell para **Windows sin Docker**, alternativas con Docker, HTTPS local, firewall, compilación del APK y CSV individual y conjunto. El servidor nativo solo necesita Python 3.11+ y Caddy 2; no requiere virtualización.
 
-**Windows con asistente:** descargar el instalador o el ZIP de actualización del servidor y el [APK genérico de la versión 1.2.0](https://github.com/WestMorris/CallLogControl/releases/tag/v1.2.0) y seguir [WINDOWS.md](WINDOWS.md). Actualizar primero el servidor y después instalar el APK encima del anterior, con la misma firma, para conservar historial y vinculación. El instalador incluye Python y Caddy, configura servicios y firewall y conserva los datos al actualizar. El alta por QR evita escribir URL o tokens y compilar un APK por servidor.
+**Windows con asistente:** descargar el instalador o el ZIP de actualización del servidor [1.3.0](https://github.com/WestMorris/CallLogControl/releases/tag/v1.3.0) y seguir [WINDOWS.md](WINDOWS.md). Esta entrega reorganiza el panel y se actualiza solo en el servidor: los teléfonos conservan el APK 1.2.0, su historial y su vinculación, sin reinstalar ni generar nuevos QR. Para teléfonos nuevos se mantiene el [APK genérico 1.2.0](https://github.com/WestMorris/CallLogControl/releases/download/v1.2.0/CallLogControl-Android-1.2.0.apk). El instalador incluye Python y Caddy, configura servicios y firewall y conserva los datos al actualizar.
 
 ## Qué incluye
 
@@ -13,7 +13,7 @@ App Android en Kotlin y microservicio para registrar el historial de llamadas de
 - Autorización explícita antes de importar las llamadas existentes y futuras. La captura continúa con la pantalla de la app bloqueada mientras conserva el permiso.
 - `CallReceiver.kt` programa una importación al terminar la llamada. WorkManager vuelve a consultar el historial aproximadamente cada 15 minutos y al abrir la app desbloqueada.
 - `CallService.kt` hace una importación manual breve con notificación visible. No mantiene un servicio permanente.
-- Panel administrativo local: equipos, llamadas con SIM/línea, paginación con selector de 25, 50, 100 o 200 registros, filtros por equipo y fechas, CSV y solicitudes remotas. Ver [WIFI.md](WIFI.md).
+- Panel administrativo local organizado en **Resumen**, **Equipos**, detalle de cada equipo y **Llamadas**. Incluye cuentas SIM/línea, filtros por equipo, SIM y fechas, paginación con selector de 25, 50, 100 o 200 registros, CSV y solicitudes remotas. Ver [WIFI.md](WIFI.md).
 - Alta desde el panel con nombre y QR de un solo uso, válido cinco minutos. La app 1.1.0 escanea con cámara y configura la URL, la credencial del teléfono y una autoridad TLS limitada a ese servidor, sin instalar certificados en Android.
 - `RemoteSyncService.kt` ofrece un modo opcional de control remoto inmediato por Wi-Fi, con servicio visible, notificación permanente y mayor consumo de batería. Debe activarse en la app y permitir batería sin restricciones.
 - Pantalla de las últimas 200 llamadas, totales globales y pendientes. CSV local con **todos** los registros, guardado mediante el selector de archivos de Android.
@@ -35,9 +35,9 @@ Creación de contraseña e historial local de llamadas.
 
 ### Panel web
 
-Vista de equipos, solicitudes de sincronización y llamadas simuladas de Ventas y Soporte.
+Resumen del panel 1.3.0, con navegación a Equipos y Llamadas, estado de contacto y llamadas ficticias.
 
-<img src="docs/screenshots/panel-prueba.jpg" alt="Panel web de administración con equipos y registros ficticios" width="600">
+<img src="docs/screenshots/panel-resumen.png" alt="Resumen del panel con menú lateral, atención y llamadas ficticias" width="800">
 
 ## Compilar e instalar Android
 
@@ -144,7 +144,8 @@ El CSV del servidor conserva `equipo_id`, `equipo`, `llamada_id`, `numero`, `tip
 | --- | --- | --- |
 | `GET /healthz` | Ninguna | `200 {"status":"ok"}` |
 | `POST /v1/calls` | Equipo activo | `204` solo después de persistir todo el lote |
-| `GET /v1/devices` | Administrador | Lista de equipos y conteos |
+| `GET /v1/devices` | Administrador | Equipos, conteos y lista `lines` de cuentas conocidas |
+| `GET /v1/devices/{id}` | Administrador | Detalle `{device, lines}` del equipo y sus cuentas; `404` si no existe |
 | `POST /v1/enrollments` | Administrador | `{"name":"Ventas 01"}` genera un QR con URL, autoridad y código temporal |
 | `POST /v1/enrollments/claim` | Código del QR | Cuerpo `{}`; canje atómico por un teléfono con credencial propia, una sola vez |
 | `GET /v1/calls?device_id=...&offset=0&limit=50` | Administrador | Página de llamadas; `limit` de 1 a 200, predeterminado 50; filtro opcional |
@@ -154,7 +155,11 @@ El CSV del servidor conserva `equipo_id`, `equipo`, `llamada_id`, `numero`, `tip
 | `GET /v1/export.csv` | Administrador | CSV de todos los equipos |
 | `GET /v1/export.csv?device_id=...` | Administrador | CSV del equipo, o `404` |
 
-`GET /v1/calls` y `GET /v1/export.csv` aceptan también `started_from` (inicio inclusivo) y `started_before` (fin exclusivo), ambos Unix en milisegundos y combinables con `device_id`. El conteo, la paginación y el CSV aplican el mismo rango; el CSV exporta todas las páginas. En el panel, **Desde / Hasta → Aplicar** incluye ambos días según la zona horaria del navegador. **CSV de la vista** respeta esos filtros; **CSV conjunto** y el CSV de la fila de un equipo exportan su historial completo.
+`GET /v1/calls` y `GET /v1/export.csv` aceptan también `started_from` (inicio inclusivo) y `started_before` (fin exclusivo), ambos Unix en milisegundos y combinables con `device_id`. Para una cuenta exacta, enviar juntos `phone_account_id` y `phone_account_component_name`: cadenas de hasta 256 caracteres, que pueden estar vacías. En el panel, seleccionar una SIM fija también su equipo para no mezclar cuentas de distintos teléfonos. El conteo, la paginación y el CSV aplican los mismos filtros; el CSV exporta todas las páginas. **Desde / Hasta → Aplicar fechas** incluye ambos días según la zona horaria del navegador. **CSV de la vista** respeta equipo, SIM y fechas aplicadas; **CSV conjunto** y el CSV de un equipo exportan su historial completo, sin esos filtros adicionales.
+
+Las cuentas de `lines` se identifican por equipo, componente e identificador; su etiqueta es la más reciente recibida. No se crean opciones de SIM a partir de llamadas sin identidad de cuenta: esas filas siguen mostrando **No disponible**. El detalle de cada equipo reúne sus datos, cantidad de llamadas y cuentas conocidas; **Ver historial** abre **Llamadas** para ese equipo y limpia los filtros anteriores de SIM y fechas.
+
+**Resumen** muestra totales globales del historial y las últimas cinco llamadas. La atención por contacto se calcula en equipos activos con más de 30 minutos desde el último contacto, o sin contacto registrado; indica antigüedad del contacto y no confirma que un teléfono esté desconectado. Los equipos revocados se muestran aparte.
 
 Credenciales en `Authorization: Bearer TOKEN`. Ingreso con `Content-Type: application/json`:
 
@@ -182,7 +187,9 @@ Credenciales en `Authorization: Bearer TOKEN`. Ingreso con `Content-Type: applic
 
 Los campos `phone_account_id`, `phone_account_component_name` y `line_label` son opcionales, cadenas de hasta 256 caracteres. Los clientes anteriores siguen enviando sus seis campos y no borran información de línea ya recibida. Las migraciones añaden columnas sin eliminar historial, estado de sincronización, equipos ni credenciales. Los CSV conservan el orden anterior y añaden `sim_o_linea`, `cuenta_telefonica_id` y `cuenta_telefonica_componente` al final.
 
-Para actualizar sin volver a vincular: instalar primero servidor 1.2.0 y después APK 1.2.0 encima del anterior con la misma firma; abrir la app, conceder el permiso de nombres si se desea y pulsar **Actualizar → Sincronizar**. Se vuelve a consultar el historial y se reenvían las llamadas cuyos datos de línea se completaron. Las llamadas que ya no estén en el historial Android conservan sus datos previos; no se inventa su SIM. No desinstalar la app ni generar nuevos QR para esta actualización.
+La actualización del panel 1.3.0 conserva el esquema de la base 1.2.0 y el APK Android 1.2.0; basta actualizar el servidor y recargar el panel. Conserva llamadas, equipos, credenciales, certificados e IP.
+
+Para incorporar los datos de SIM en una app anterior a 1.2.0: actualizar primero el servidor y después instalar el APK 1.2.0 encima del anterior con la misma firma; abrir la app, conceder el permiso de nombres si se desea y pulsar **Actualizar → Sincronizar**. Se vuelve a consultar el historial y se reenvían las llamadas cuyos datos de línea se completaron. Las llamadas que ya no estén en el historial Android conservan sus datos previos; no se inventa su SIM. No desinstalar la app ni generar nuevos QR.
 
 Tipos: 1 entrante, 2 saliente, 3 perdida, 4 buzón de voz, 5 rechazada, 6 bloqueada, 7 contestada en otro equipo. `presentation` conserva el valor de Android (1–5). No se admiten campos extras. Un lote inválido se rechaza completo. La app marca registros enviados únicamente con `204` y solo si no han cambiado mientras estaban en tránsito. Errores o reintentos conservan los pendientes.
 
@@ -190,6 +197,7 @@ Tipos: 1 entrante, 2 saliente, 3 perdida, 4 buzón de voz, 5 rechazada, 6 bloque
 
 ```sh
 python3 -m unittest discover -s server -v
+node server/test_panel.js
 ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 
 # Con emulador o teléfono conectado
@@ -209,6 +217,8 @@ Verificación realizada el **30/10/2026**: APK debug compilado, pruebas Kotlin y
 La entrega **1.1.0** añade quince pruebas de servidor/configuración, instalación y ciclo de vida real de los servicios en Windows Server 2022 y cinco pruebas instrumentadas Android, incluyendo QR y TLS por servidor. Detalles y límites de verificación en [WINDOWS.md](WINDOWS.md#verificación-de-esta-entrega).
 
 Verificación **1.2.0, 04/11/2026**: 22 pruebas de servidor/configuración, pruebas JavaScript del panel, cuatro pruebas Kotlin y Lint sin errores. En Android 14 se verificaron seis pruebas de importación, migración Room e interfaz y dos de QR/TLS, incluido el envío real de dos cuentas distintas del mismo teléfono por HTTPS. Se comprobó el panel en escritorio y móvil con datos ficticios y el CSV filtrado. El APK genérico conserva el certificado de firma del APK público 1.1.0 y no incluye una CA local. Falta validar llamadas con dos SIM en teléfonos físicos; dos escenarios anteriores de Wi-Fi/control remoto no se repitieron en esta entrega.
+
+Verificación local **1.3.0, 04/11/2026**: 24 pruebas Python, pruebas JavaScript de navegación, filtros, QR y aislamiento entre sesiones, y revisión real en Chrome de escritorio y móvil (320 y 390 píxeles). Se comprobaron detalle de equipo, historial, paginación, CSV filtrado, QR y solicitudes pendientes con datos ficticios. Las consultas de detalle y filtros no modifican el esquema, los registros ni las credenciales. Android permanece en 1.2.0 y no se recompiló para esta entrega.
 
 ## Restricciones y protección de datos
 

@@ -258,7 +258,7 @@ macOS/Linux:
 ./gradlew :app:assembleDebug --max-workers=2
 ```
 
-El APK queda en `app/build/outputs/apk/debug/app-debug.apk` (versión actual **1.2.0**). Transferirlo al teléfono e instalarlo manualmente. Autorizar la instalación desde esa fuente cuando Android lo solicite. Para actualizar, instalar primero el servidor 1.2.0 y después el APK encima con la misma firma, sin desinstalar ni volver a vincular. Referencia: [compilación por línea de comandos Android](https://developer.android.com/build/building-cmdline).
+El APK queda en `app/build/outputs/apk/debug/app-debug.apk` (versión Android actual **1.2.0**). Transferirlo al teléfono e instalarlo manualmente si es nuevo o usa una app anterior. Autorizar la instalación desde esa fuente cuando Android lo solicite; para actualizar la app, instalar encima con la misma firma, sin desinstalar ni volver a vincular. La entrega 1.3.0 cambia solo el servidor y el panel: los teléfonos con 1.2.0 conservan su APK. Referencia: [compilación por línea de comandos Android](https://developer.android.com/build/building-cmdline).
 
 **Actualizaciones desde otro PC:** Android exige la misma clave de firma. Cada PC suele generar su propio `debug.keystore`; un APK compilado en Windows puede no instalarse encima del anterior compilado en macOS. Conservar y usar la clave original de forma privada para actualizar sin borrar datos. No desinstalar como primer recurso: elimina el historial local y la configuración. Antes de una reinstalación deliberada, sincronizar y exportar lo necesario. Actualizar solo la app no traslada al nuevo servidor los registros que ya estaban en el anterior.
 
@@ -280,11 +280,15 @@ La app `debug` admite credenciales de prueba de 10 caracteres; `release` exige a
 
 ## Panel web y exportaciones CSV
 
-La tabla muestra **SIM / línea** y permite elegir **25, 50, 100 o 200 registros por página**, con botones Anterior/Siguiente y rango/total. Los CSV exportan todos los registros que coincidan con el filtro, independientemente de la página o cantidad seleccionada. App y CSV incluyen el nombre e identificador de la cuenta de cada llamada que Android proporciona; sin ese dato aparece **No disponible**. Actualizar e importar de nuevo puede completar llamadas antiguas que sigan en el historial Android. Los CSV añaden `sim_o_linea`, `cuenta_telefonica_id` y `cuenta_telefonica_componente` al final de las columnas existentes.
+El panel 1.3.0 se organiza en **Resumen**, **Equipos** y **Llamadas**. **Resumen** muestra totales globales del historial y las últimas cinco llamadas; los equipos activos sin contacto registrado o con más de 30 minutos desde el último contacto aparecen para revisar, sin confirmar una desconexión. Los revocados se muestran aparte. En **Equipos**, pulsar **Ver detalle** para consultar el teléfono y sus cuentas; **Ver historial** abre **Llamadas** con ese equipo seleccionado y limpia las fechas y la SIM anteriores.
+
+En **Llamadas**, filtrar por **Equipo**, **SIM / línea** y **Desde / Hasta → Aplicar fechas**. Las cuentas se identifican por equipo, componente e identificador; elegir una SIM selecciona también su equipo. La etiqueta es la última recibida y el identificador puede ser interno, no necesariamente el número de la línea. Las filas sin identidad muestran **No disponible** y no crean una opción de filtro SIM. **Limpiar fechas** quita solo el rango, que incluye ambos días según la zona horaria del navegador.
+
+La tabla muestra **SIM / línea** y permite elegir **25, 50, 100 o 200 registros por página**, con botones Anterior/Siguiente y rango/total. Cambiar filtros o cantidad vuelve a la primera página. **CSV de la vista** exporta todos los registros que coincidan con equipo, SIM y fechas aplicadas, independientemente de la página o cantidad seleccionada. **CSV conjunto** exporta todo el historial de todos los equipos; **CSV del equipo** y el CSV de su fila exportan todo ese equipo, sin filtros adicionales de fechas o SIM. Los CSV conservan `sim_o_linea`, `cuenta_telefonica_id` y `cuenta_telefonica_componente` al final de las columnas existentes. Actualizar e importar de nuevo desde Android puede completar llamadas antiguas que sigan en su historial.
 
 En el propio servidor, abrir **[http://127.0.0.1:8088](http://127.0.0.1:8088)**. Introducir el valor `CALLLOG_ADMIN_TOKEN` de `.env.wifi`, sin el nombre de la variable. La credencial del teléfono no sirve para administrar.
 
-El panel muestra equipos, cantidad de llamadas, último contacto, última sincronización, solicitudes y el historial paginado. Permite seleccionar un equipo y filtrar con **Desde / Hasta → Aplicar**; ambos días se incluyen según la zona horaria del navegador. **Limpiar** quita las fechas. **CSV de la vista** descarga todos los registros que coincidan con equipo y fechas, aunque haya varias páginas. **CSV conjunto** y el botón **CSV** de cada equipo descargan el historial completo, sin el filtro de fechas. Se actualiza cada cinco segundos. Al recargar o salir se pierde la sesión: la clave se mantiene solo en memoria del navegador.
+Se actualiza cada cinco segundos. Al recargar o salir se pierde la sesión: la clave se mantiene solo en memoria del navegador. Para actualizar desde el servidor 1.2.0 basta instalar el servidor 1.3.0 y recargar el panel; no cambia el esquema y los teléfonos conservan APK, historial y vinculación. En Windows con asistente puede usarse el [ZIP de actualización](WINDOWS.md#actualización-130-solo-del-servidor). Las instalaciones manuales o Docker se actualizan con su procedimiento habitual, conservando datos, configuración y certificados.
 
 La dirección `127.0.0.1` es del equipo donde se abre el navegador: no permite acceder al PC desde el teléfono. Para el panel en otro PC se puede usar `https://IP_DEL_SERVIDOR:8443`, configurando correctamente la confianza de su autoridad local en ese navegador. No enviar la clave administrativa a través de HTTP por la LAN.
 
@@ -342,7 +346,7 @@ Funciona tanto con Python nativo como con Docker. Mantiene una conexión HTTPS d
 
 ## Añadir y revocar equipos
 
-No hace falta crear un servidor ni otro APK por cada teléfono: los que usan el mismo servidor pueden compartir el APK y su certificado, pero **cada uno debe tener su token**. El nombre del registro permite distinguirlos en el panel y los CSV. La interfaz permite dar de alta desde **Agregar teléfono por QR**. El nombre se elige allí o desde la terminal; todavía no hay renombrado de equipos.
+No hace falta crear un servidor ni otro APK por cada teléfono: los que usan el mismo servidor pueden compartir el APK y su certificado, pero **cada uno debe tener su token**. El nombre del registro permite distinguirlos en el panel y los CSV. En **Equipos → Agregar teléfono** se abre **Agregar teléfono por QR**. El nombre se elige allí o desde la terminal; todavía no hay renombrado de equipos.
 
 Windows sin Docker (guardar cada JSON con nombre distinto):
 

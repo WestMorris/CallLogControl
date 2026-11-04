@@ -43,6 +43,13 @@ def call_filters(params):
     if "device_id" in params:
         clauses.append("c.device_id=?")
         values.append(params["device_id"][0])
+    account_fields = ("phone_account_id", "phone_account_component_name")
+    if any(name in params for name in account_fields):
+        if not all(name in params and len(params[name][0]) <= 256 for name in account_fields):
+            raise ValueError("Indica juntos el identificador y el componente de la cuenta SIM/línea")
+        for name in account_fields:
+            clauses.append(f"c.{name}=?")
+            values.append(params[name][0])
     bounds = {}
     for name, operator in [("started_from", ">="), ("started_before", "<")]:
         if name not in params:
@@ -57,6 +64,21 @@ def call_filters(params):
             and bounds["started_from"] >= bounds["started_before"]):
         raise ValueError("La fecha Desde debe ser anterior al fin del rango")
     return (" WHERE " + " AND ".join(clauses) if clauses else ""), tuple(values)
+
+
+def known_lines(db, device_id=None):
+    rows = db.execute("""SELECT device_id,device_name,phone_account_id,phone_account_component_name,
+            line_label,last_call_at FROM (
+        SELECT c.device_id,d.name AS device_name,c.phone_account_id,c.phone_account_component_name,
+            c.line_label,c.started_at AS last_call_at,
+            ROW_NUMBER() OVER (PARTITION BY c.device_id,c.phone_account_component_name,c.phone_account_id
+                ORDER BY c.started_at DESC,c.id DESC) AS position
+        FROM calls c JOIN devices d ON d.id=c.device_id
+        WHERE (c.phone_account_id<>'' OR c.phone_account_component_name<>'')""" +
+        (" AND c.device_id=?" if device_id is not None else "") +
+        ") WHERE position=1 ORDER BY device_name,phone_account_component_name,phone_account_id",
+        (device_id,) if device_id is not None else ()).fetchall()
+    return [dict(row) for row in rows]
 
 
 class Store:
@@ -412,16 +434,23 @@ class Handler(BaseHTTPRequestHandler):
                     self.server.poll_slots.release()
         if not self.is_admin():
             return self.reply(401, {"error": "Se requiere credencial de administrador"})
-        if url.path == "/v1/devices":
+        device_route = re.fullmatch(r"/v1/devices/([0-9a-f-]{36})", url.path)
+        if url.path == "/v1/devices" or device_route:
             with self.server.store.connect() as db:
                 rows = db.execute("""SELECT d.id,d.name,d.active,d.last_seen_at,d.last_sync_at,
                     d.sync_requested_id,d.sync_completed_id,COUNT(c.id) AS call_count
-                    FROM devices d LEFT JOIN calls c ON c.device_id=d.id
-                    GROUP BY d.id ORDER BY d.name""").fetchall()
-            return self.reply(200, {"devices": [dict(row) for row in rows]})
+                    FROM devices d LEFT JOIN calls c ON c.device_id=d.id""" +
+                    (" WHERE d.id=?" if device_route else "") + " GROUP BY d.id ORDER BY d.name",
+                    (device_route[1],) if device_route else ()).fetchall()
+                if device_route and not rows:
+                    return self.reply(404, {"error": "Equipo inexistente"})
+                lines = known_lines(db, device_route[1] if device_route else None)
+            return self.reply(200, {"device": dict(rows[0]), "lines": lines} if device_route else
+                             {"devices": [dict(row) for row in rows], "lines": lines})
         if url.path == "/v1/calls":
             params = parse_qs(url.query, keep_blank_values=True)
-            if set(params) - {"device_id", "offset", "limit", "started_from", "started_before"} or any(len(v) != 1 for v in params.values()):
+            if set(params) - {"device_id", "offset", "limit", "started_from", "started_before",
+                              "phone_account_id", "phone_account_component_name"} or any(len(v) != 1 for v in params.values()):
                 return self.reply(400, {"error": "Filtros inválidos"})
             try:
                 offset = int(params.get("offset", ["0"])[0])
@@ -449,7 +478,8 @@ class Handler(BaseHTTPRequestHandler):
         if url.path != "/v1/export.csv":
             return self.reply(404, {"error": "Ruta inexistente"})
         params = parse_qs(url.query, keep_blank_values=True)
-        if set(params) - {"device_id", "started_from", "started_before"} or any(len(v) != 1 for v in params.values()):
+        if set(params) - {"device_id", "started_from", "started_before",
+                          "phone_account_id", "phone_account_component_name"} or any(len(v) != 1 for v in params.values()):
             return self.reply(400, {"error": "Filtros inválidos"})
         try:
             where, values = call_filters(params)

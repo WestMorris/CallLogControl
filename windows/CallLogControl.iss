@@ -4,7 +4,7 @@
 #ifndef OutputDir
   #define OutputDir "..\build\windows"
 #endif
-#define AppVersion "1.2.0"
+#define AppVersion "1.3.0"
 
 [Setup]
 AppId={{75A2046F-B593-46B3-B39E-359BA1229807}

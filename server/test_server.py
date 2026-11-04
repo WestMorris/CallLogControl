@@ -11,6 +11,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 from urllib.error import HTTPError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from server import MAX_BODY, Server, Store, token_hash
@@ -110,6 +111,73 @@ class ServerTest(unittest.TestCase):
         with self.store.connect() as db:
             db.execute("UPDATE devices SET active=0 WHERE id=?", (self.a["device_id"],))
         self.assertEqual(self.send(self.a, [self.call])[0], 401)
+
+    def test_device_details_and_known_lines_are_read_only_and_admin_only(self):
+        first = dict(self.call, phone_account_id="same-id", phone_account_component_name="phone/Primary", line_label="Anterior")
+        latest = dict(first, id="latest", started_at=2000, line_label="Trabajo")
+        other = dict(first, id="other", phone_account_component_name="phone/Secondary", line_label="Personal")
+        self.send(self.a, [first, latest, other, dict(self.call, id="unknown")])
+        self.send(self.b, [latest])
+        with self.store.connect() as db:
+            before = db.execute("PRAGMA schema_version").fetchone()[0]
+            devices_before = [tuple(r) for r in db.execute("SELECT * FROM devices ORDER BY id")]
+            calls_before = [tuple(r) for r in db.execute("SELECT * FROM calls ORDER BY device_id,id")]
+        route = "/v1/devices/" + self.a["device_id"]
+        for token in ["", "wrong", self.a["token"]]:
+            self.assertEqual(self.request(route, token)[0], 401)
+        status, body = self.request(route, self.admin)
+        self.assertEqual(status, 200)
+        detail = json.loads(body)
+        self.assertEqual(detail["device"]["id"], self.a["device_id"])
+        self.assertEqual(detail["device"]["call_count"], 4)
+        self.assertNotIn("token_hash", detail["device"])
+        self.assertEqual(len(detail["lines"]), 2)
+        lines = {r["phone_account_component_name"]: r for r in detail["lines"]}
+        self.assertEqual(lines["phone/Primary"]["line_label"], "Trabajo")
+        self.assertEqual(lines["phone/Primary"]["last_call_at"], 2000)
+        self.assertTrue(all(r["device_id"] == self.a["device_id"] for r in detail["lines"]))
+        all_data = json.loads(self.request("/v1/devices", self.admin)[1])
+        self.assertEqual(len(all_data["lines"]), 3)
+        self.assertEqual(self.request("/v1/devices/00000000-0000-0000-0000-000000000000", self.admin)[0], 404)
+        with self.store.connect() as db:
+            self.assertEqual(db.execute("PRAGMA schema_version").fetchone()[0], before)
+            self.assertEqual([tuple(r) for r in db.execute("SELECT * FROM devices ORDER BY id")], devices_before)
+            self.assertEqual([tuple(r) for r in db.execute("SELECT * FROM calls ORDER BY device_id,id")], calls_before)
+            db.execute("UPDATE devices SET active=0 WHERE id=?", (self.a["device_id"],))
+        self.assertEqual(json.loads(self.request(route, self.admin)[1])["device"]["active"], 0)
+        self.assertEqual(self.store.device_for(self.b["token"]), self.b["device_id"])
+
+    def test_sim_filter_matches_device_and_account_for_all_pages_and_csv(self):
+        first = dict(self.call, phone_account_id="same&id", phone_account_component_name="phone/Primary", line_label="Trabajo")
+        calls = [dict(first, id=str(i), started_at=1000+i) for i in range(30)]
+        calls += [dict(first, id="other-component", phone_account_component_name="phone/Secondary"),
+                  dict(self.call, id="unknown")]
+        self.send(self.a, calls)
+        self.send(self.b, [first])
+        query = "?" + urlencode({"device_id": self.a["device_id"], "phone_account_id": "same&id",
+                                  "phone_account_component_name": "phone/Primary", "started_from":1000, "started_before":2000})
+        first_page = json.loads(self.request("/v1/calls" + query + "&limit=25", self.admin)[1])
+        last_page = json.loads(self.request("/v1/calls" + query + "&limit=25&offset=25", self.admin)[1])
+        self.assertEqual(first_page["total"], 30)
+        self.assertTrue(first_page["has_more"])
+        self.assertFalse(last_page["has_more"])
+        self.assertEqual({r["id"] for r in first_page["calls"] + last_page["calls"]}, {str(i) for i in range(30)})
+        status, body = self.request("/v1/export.csv" + query, self.admin)
+        self.assertEqual(status, 200)
+        rows = list(csv.DictReader(io.StringIO(body.decode("utf-8-sig"))))
+        self.assertEqual(len(rows), 30)
+        self.assertTrue(all(r["equipo_id"] == self.a["device_id"] and r["cuenta_telefonica_componente"] == "phone/Primary" for r in rows))
+        empty_pair = urlencode({"phone_account_id":"", "phone_account_component_name":""})
+        self.assertEqual(json.loads(self.request("/v1/calls?" + empty_pair, self.admin)[1])["total"], 1)
+        for route in ["/v1/calls", "/v1/export.csv"]:
+            for invalid in ["phone_account_id=x", "phone_account_component_name=x", "phone_account_id=x&phone_account_id=y&phone_account_component_name=z",
+                            urlencode({"phone_account_id":"x"*257, "phone_account_component_name":"p"}),
+                            urlencode({"phone_account_id":"x", "phone_account_component_name":"p"*257})]:
+                self.assertEqual(self.request(route + "?" + invalid, self.admin)[0], 400)
+            injection = urlencode({"phone_account_id":"' OR 1=1 --", "phone_account_component_name":"phone/Primary"})
+            status, body = self.request(route + "?" + injection, self.admin)
+            self.assertEqual(status, 200)
+            self.assertEqual(json.loads(body)["total"] if route.endswith("calls") else len(list(csv.DictReader(io.StringIO(body.decode("utf-8-sig"))))), 0)
 
     def test_invalid_batch_is_atomic_and_strict(self):
         for field, value in [("duration_seconds", -1), ("type", True), ("presentation", 99),
