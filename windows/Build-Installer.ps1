@@ -27,7 +27,7 @@ foreach ($name in @('CallLogControlAPI','CallLogControlHTTPS')) { Copy-Item (Joi
 # Embedded Python uses an isolated search path; explicitly include the application modules.
 Add-Content -Encoding ascii (Join-Path $payload 'python\python313._pth') '..\server'
 New-Item -ItemType Directory -Force (Join-Path $payload 'server'),(Join-Path $payload 'windows') | Out-Null
-foreach ($name in @('server.py','qrcodegen.py','Caddyfile.wifi-native')) { Copy-Item (Join-Path $repo "server\$name") (Join-Path $payload 'server') }
+foreach ($name in @('server.py','qrcodegen.py','analytics.py','Caddyfile.wifi-native')) { Copy-Item (Join-Path $repo "server\$name") (Join-Path $payload 'server') }
 Copy-Item -Recurse (Join-Path $repo 'server\web') (Join-Path $payload 'server')
 foreach ($name in @('runtime.py','Setup-Services.ps1','Open-Admin.ps1')) { Copy-Item (Join-Path $PSScriptRoot $name) (Join-Path $payload 'windows') }
 Copy-Item (Join-Path $repo 'LICENSE') $payload

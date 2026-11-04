@@ -20,6 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 import uuid
 from qrcodegen import QrCode
+import analytics
 
 MAX_BODY = 256 * 1024
 MAX_BATCH = 500
@@ -105,7 +106,13 @@ class Store:
                 CREATE TABLE IF NOT EXISTS enrollments (
                     code_hash TEXT PRIMARY KEY, name TEXT NOT NULL, expires_at INTEGER NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS analytics_preferences (
+                    singleton INTEGER PRIMARY KEY CHECK(singleton=1), revision INTEGER NOT NULL,
+                    library TEXT NOT NULL
+                );
             """)
+            db.execute("INSERT OR IGNORE INTO analytics_preferences(singleton,revision,library) VALUES (1,0,?)",
+                       (json.dumps(analytics.EMPTY_LIBRARY),))
             columns = {row["name"] for row in db.execute("PRAGMA table_info(devices)")}
             for name, kind in [("last_seen_at", "INTEGER"), ("last_sync_at", "INTEGER"),
                                ("sync_requested_id", "TEXT"), ("sync_completed_id", "TEXT")]:
@@ -317,6 +324,23 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(400, {"error": str(error)})
             return None
 
+    def do_PUT(self):
+        if self.path != "/v1/analytics/views":
+            return self.reply(404, {"error": "Ruta inexistente"})
+        if not self.is_admin():
+            return self.reply(401, {"error": "Se requiere credencial de administrador"})
+        payload = self.read_json()
+        if payload is None:
+            return
+        try:
+            return self.reply(200, analytics.put_views(self.server.store, payload))
+        except analytics.Conflict as error:
+            return self.reply(409, {"error": str(error)})
+        except ValueError as error:
+            return self.reply(400, {"error": str(error)})
+        except sqlite3.Error:
+            return self.reply(503, {"error": "Almacenamiento temporalmente no disponible"})
+
     def do_POST(self):
         if self.path == "/v1/enrollments":
             if not self.is_admin():
@@ -390,7 +414,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         url = urlsplit(self.path)
         assets = {"/": ("index.html", "text/html"), "/panel.js": ("panel.js", "text/javascript"),
-                  "/panel.css": ("panel.css", "text/css")}
+                  "/panel.css": ("panel.css", "text/css"), "/analytics.js": ("analytics.js", "text/javascript"),
+                  "/analytics.css": ("analytics.css", "text/css")}
         if url.path in assets:
             filename, content_type = assets[url.path]
             body = (Path(__file__).parent / "web" / filename).read_bytes()
@@ -434,6 +459,40 @@ class Handler(BaseHTTPRequestHandler):
                     self.server.poll_slots.release()
         if not self.is_admin():
             return self.reply(401, {"error": "Se requiere credencial de administrador"})
+        if url.path in {"/v1/analytics", "/v1/analytics/export", "/v1/analytics/views"}:
+            params = parse_qs(url.query, keep_blank_values=True)
+            try:
+                if url.path == "/v1/analytics/views":
+                    if params:
+                        raise ValueError("No se admiten filtros al leer las vistas")
+                    return self.reply(200, analytics.get_views(self.server.store))
+                allowed = {"state", "kind", "format"} if url.path.endswith("/export") else {"state"}
+                if set(params) - allowed or any(len(value) != 1 for value in params.values()) or "state" not in params:
+                    raise ValueError("Indica state una sola vez y únicamente los parámetros admitidos")
+                if len(params["state"][0]) > 16384:
+                    raise ValueError("La configuración del reporte es demasiado grande")
+                state = json.loads(params["state"][0])
+                if url.path == "/v1/analytics":
+                    return self.reply(200, analytics.report(self.server.store, state))
+                format = params.get("format", ["csv"])[0]
+                output, filename = analytics.export_file(self.server.store, state, params.get("kind", ["summary"])[0], format)
+                with output:
+                    length = output.seek(0, io.SEEK_END)
+                    output.seek(0)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/csv; charset=utf-8" if format == "csv" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+                    self.send_header("Content-Length", str(length))
+                    self.send_header("Cache-Control", "no-store")
+                    self.send_header("X-Content-Type-Options", "nosniff")
+                    self.end_headers()
+                    while chunk := output.read(65536):
+                        self.wfile.write(chunk)
+                return
+            except ValueError as error:
+                return self.reply(400, {"error": str(error)})
+            except (sqlite3.Error, OSError):
+                return self.reply(503, {"error": "No se pudo generar el reporte. Los registros se conservaron"})
         device_route = re.fullmatch(r"/v1/devices/([0-9a-f-]{36})", url.path)
         if url.path == "/v1/devices" or device_route:
             with self.server.store.connect() as db:

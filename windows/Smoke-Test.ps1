@@ -1,9 +1,10 @@
-param([Parameter(Mandatory=$true)][string]$SetupPath)
+param([Parameter(Mandatory=$true)][string]$SetupPath, [string]$PreviousSetupPath = '')
 $ErrorActionPreference = 'Stop'
 $installDir = Join-Path $env:ProgramFiles 'CallLogControl'
 $dataDir = Join-Path $env:ProgramData 'CallLogControl'
-function Install-Server {
-    $process = Start-Process -FilePath $SetupPath -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',('/LOG="' + (Join-Path $env:TEMP 'calllog-setup.log') + '"')) -Wait -PassThru
+$analyticsReady = -not $PreviousSetupPath
+function Install-Server([string]$Installer = $SetupPath) {
+    $process = Start-Process -FilePath $Installer -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',('/LOG="' + (Join-Path $env:TEMP 'calllog-setup.log') + '"')) -Wait -PassThru
     if ($process.ExitCode -ne 0) { throw "Instalador devolvio $($process.ExitCode)" }
 }
 function Check-Services {
@@ -13,13 +14,16 @@ function Check-Services {
     }
 }
 function Verify-Existing {
-    py -3 (Join-Path $PSScriptRoot 'smoke_verify.py') --install-dir $installDir --check-existing
+    $verifyArgs = @('--install-dir', $installDir, '--check-existing')
+    if (-not $analyticsReady) { $verifyArgs += '--legacy' }
+    py -3 (Join-Path $PSScriptRoot 'smoke_verify.py') @verifyArgs
     if ($LASTEXITCODE -ne 0) { throw 'No se conservaron los datos o el servicio no responde.' }
 }
 try {
-    $invalid = Start-Process -FilePath $SetupPath -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/LANIP=192.0.2.254') -Wait -PassThru
+    $initialSetup = if ($PreviousSetupPath) { $PreviousSetupPath } else { $SetupPath }
+    $invalid = Start-Process -FilePath $initialSetup -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/LANIP=192.0.2.254') -Wait -PassThru
     if ($invalid.ExitCode -eq 0) { throw 'La instalacion fallida no devolvio un error.' }
-    Install-Server
+    Install-Server $initialSetup
     Check-Services
     $configBefore = Get-FileHash (Join-Path $dataDir 'config.json')
     $caBefore = Get-FileHash (Join-Path $dataDir 'caddy\pki\authorities\local\root.crt')
@@ -27,7 +31,9 @@ try {
     if ($firewall.Enabled -ne 'True') { throw 'Falta la regla de firewall.' }
     $acl = Get-Acl $dataDir
     if (-not $acl.AreAccessRulesProtected) { throw 'Los datos heredan permisos generales de ProgramData.' }
-    py -3 (Join-Path $PSScriptRoot 'smoke_verify.py') --install-dir $installDir
+    $seedArgs = @('--install-dir', $installDir)
+    if (-not $analyticsReady) { $seedArgs += '--legacy' }
+    py -3 (Join-Path $PSScriptRoot 'smoke_verify.py') @seedArgs
     if ($LASTEXITCODE -ne 0) { throw 'Fallo la integracion Windows.' }
     # Exercise the actual service recovery policy after an unexpected API crash.
     $api = Get-CimInstance Win32_Service -Filter "Name='CallLogControlAPI'"
@@ -37,17 +43,11 @@ try {
     Start-Sleep -Seconds 12
     Check-Services
     Verify-Existing
-    & (Join-Path $PSScriptRoot 'Update-Server.ps1')
-    Check-Services
-    Verify-Existing
-    if ((Get-FileHash (Join-Path $dataDir 'config.json')).Hash -ne $configBefore.Hash) { throw 'Cambio la configuracion con el actualizador del servidor.' }
-    if ((Get-FileHash (Join-Path $dataDir 'caddy\pki\authorities\local\root.crt')).Hash -ne $caBefore.Hash) { throw 'Cambio la autoridad con el actualizador del servidor.' }
-    if (-not (Get-ChildItem (Join-Path $dataDir 'backups') -Filter 'calls.sqlite3' -Recurse)) { throw 'El actualizador no respaldo SQLite.' }
     $broken = Join-Path $env:TEMP ('calllog-broken-update-' + [guid]::NewGuid().ToString('N'))
     $codeBefore = Get-FileHash (Join-Path $installDir 'server\server.py')
     try {
         New-Item -ItemType Directory -Path (Join-Path $broken 'windows') -Force | Out-Null
-        Copy-Item (Join-Path $installDir 'server') (Join-Path $broken 'server') -Recurse
+        Copy-Item (Join-Path (Split-Path $PSScriptRoot -Parent) 'server') (Join-Path $broken 'server') -Recurse
         Copy-Item (Join-Path $PSScriptRoot 'Update-Server.ps1') (Join-Path $broken 'windows')
         [IO.File]::WriteAllText((Join-Path $broken 'server\server.py'), "raise RuntimeError('Windows rollback test')`n", [Text.UTF8Encoding]::new($false))
         $rejected = $false
@@ -56,11 +56,20 @@ try {
         Check-Services
         Verify-Existing
         if ((Get-FileHash (Join-Path $installDir 'server\server.py')).Hash -ne $codeBefore.Hash) { throw 'No se recupero el codigo anterior.' }
+        if ($PreviousSetupPath -and (Test-Path (Join-Path $installDir 'server\analytics.py'))) { throw 'El rollback anterior conservo un modulo que no existia.' }
         if ((Get-FileHash (Join-Path $dataDir 'config.json')).Hash -ne $configBefore.Hash) { throw 'Cambio la configuracion durante rollback.' }
         if ((Get-FileHash (Join-Path $dataDir 'caddy\pki\authorities\local\root.crt')).Hash -ne $caBefore.Hash) { throw 'Cambio la autoridad durante rollback.' }
     } finally {
         Remove-Item -LiteralPath $broken -Recurse -Force
     }
+    & (Join-Path $PSScriptRoot 'Update-Server.ps1')
+    $analyticsReady = $true
+    Check-Services
+    Verify-Existing
+    if ((Get-FileHash (Join-Path $dataDir 'config.json')).Hash -ne $configBefore.Hash) { throw 'Cambio la configuracion con el actualizador del servidor.' }
+    if ((Get-FileHash (Join-Path $dataDir 'caddy\pki\authorities\local\root.crt')).Hash -ne $caBefore.Hash) { throw 'Cambio la autoridad con el actualizador del servidor.' }
+    if (-not (Get-ChildItem (Join-Path $dataDir 'backups') -Filter 'calls.sqlite3' -Recurse)) { throw 'El actualizador no respaldo SQLite.' }
+    $codeBefore = Get-FileHash (Join-Path $installDir 'server\server.py')
     $migrating = Join-Path $env:TEMP ('calllog-migrating-update-' + [guid]::NewGuid().ToString('N'))
     try {
         New-Item -ItemType Directory -Path (Join-Path $migrating 'windows') -Force | Out-Null

@@ -4,7 +4,7 @@ App Android en Kotlin y microservicio para registrar el historial de llamadas de
 
 **Instalar en Windows, macOS o Linux por Wi-Fi:** ver [WIFI.md](WIFI.md). Incluye una guía de PowerShell para **Windows sin Docker**, alternativas con Docker, HTTPS local, firewall, compilación del APK y CSV individual y conjunto. El servidor nativo solo necesita Python 3.11+ y Caddy 2; no requiere virtualización.
 
-**Windows con asistente:** descargar el instalador o el ZIP de actualización del servidor [1.3.0](https://github.com/WestMorris/CallLogControl/releases/tag/v1.3.0) y seguir [WINDOWS.md](WINDOWS.md). Esta entrega reorganiza el panel y se actualiza solo en el servidor: los teléfonos conservan el APK 1.2.0, su historial y su vinculación, sin reinstalar ni generar nuevos QR. Para teléfonos nuevos se mantiene el [APK genérico 1.2.0](https://github.com/WestMorris/CallLogControl/releases/download/v1.2.0/CallLogControl-Android-1.2.0.apk). El instalador incluye Python y Caddy, configura servicios y firewall y conserva los datos al actualizar.
+**Windows con asistente:** descargar el instalador o el ZIP de actualización del servidor [1.4.0](https://github.com/WestMorris/CallLogControl/releases/tag/v1.4.0) y seguir [WINDOWS.md](WINDOWS.md). Esta entrega añade Analítica y se actualiza solo en el servidor: los teléfonos conservan el APK 1.2.0, su historial y su vinculación, sin reinstalar ni generar nuevos QR. Para teléfonos nuevos se mantiene el [APK genérico 1.2.0](https://github.com/WestMorris/CallLogControl/releases/download/v1.2.0/CallLogControl-Android-1.2.0.apk). El instalador incluye Python y Caddy, configura servicios y firewall y conserva los datos al actualizar.
 
 ## Qué incluye
 
@@ -14,6 +14,7 @@ App Android en Kotlin y microservicio para registrar el historial de llamadas de
 - `CallReceiver.kt` programa una importación al terminar la llamada. WorkManager vuelve a consultar el historial aproximadamente cada 15 minutos y al abrir la app desbloqueada.
 - `CallService.kt` hace una importación manual breve con notificación visible. No mantiene un servicio permanente.
 - Panel administrativo local organizado en **Resumen**, **Equipos**, detalle de cada equipo y **Llamadas**. Incluye cuentas SIM/línea, filtros por equipo, SIM y fechas, paginación con selector de 25, 50, 100 o 200 registros, CSV y solicitudes remotas. Ver [WIFI.md](WIFI.md).
+- **Analítica:** reportes sobre las llamadas recibidas, con filtros, agrupaciones, gráficos, comparación de periodos y exportación CSV/Excel. Las vistas guardadas se comparten en el servidor y se conservan al actualizar.
 - Alta desde el panel con nombre y QR de un solo uso, válido cinco minutos. La app 1.1.0 escanea con cámara y configura la URL, la credencial del teléfono y una autoridad TLS limitada a ese servidor, sin instalar certificados en Android.
 - `RemoteSyncService.kt` ofrece un modo opcional de control remoto inmediato por Wi-Fi, con servicio visible, notificación permanente y mayor consumo de batería. Debe activarse en la app y permitir batería sin restricciones.
 - Pantalla de las últimas 200 llamadas, totales globales y pendientes. CSV local con **todos** los registros, guardado mediante el selector de archivos de Android.
@@ -35,9 +36,9 @@ Creación de contraseña e historial local de llamadas.
 
 ### Panel web
 
-Resumen del panel 1.3.0, con navegación a Equipos y Llamadas, estado de contacto y llamadas ficticias.
+Analítica del panel 1.4.0, con filtros, gráficos, vistas guardadas y exportación CSV/Excel. La captura utiliza llamadas ficticias.
 
-<img src="docs/screenshots/panel-resumen.png" alt="Resumen del panel con menú lateral, atención y llamadas ficticias" width="800">
+<img src="docs/screenshots/panel-analitica.png" alt="Analítica con menú lateral, filtros, gráfico central y resumen por grupo" width="800">
 
 ## Compilar e instalar Android
 
@@ -154,12 +155,28 @@ El CSV del servidor conserva `equipo_id`, `equipo`, `llamada_id`, `numero`, `tip
 | `POST /v1/sync-ack` | Equipo activo | Confirma `{"request_id":"UUID"}` después de importar y enviar todos los pendientes |
 | `GET /v1/export.csv` | Administrador | CSV de todos los equipos |
 | `GET /v1/export.csv?device_id=...` | Administrador | CSV del equipo, o `404` |
+| `GET /v1/analytics?state=...` | Administrador | Indicadores, grupos y detalle paginado del estado JSON codificado en la URL |
+| `GET /v1/analytics/export?state=...&kind=summary&format=xlsx` | Administrador | Descarga del resumen o detalle (`kind=summary` / `records`) en CSV o XLSX |
+| `GET /v1/analytics/views` | Administrador | Biblioteca compartida de vistas y su revisión |
+| `PUT /v1/analytics/views` | Administrador | Guarda `{revision, library}`; `409` si otra sesión ya cambió la revisión |
 
 `GET /v1/calls` y `GET /v1/export.csv` aceptan también `started_from` (inicio inclusivo) y `started_before` (fin exclusivo), ambos Unix en milisegundos y combinables con `device_id`. Para una cuenta exacta, enviar juntos `phone_account_id` y `phone_account_component_name`: cadenas de hasta 256 caracteres, que pueden estar vacías. En el panel, seleccionar una SIM fija también su equipo para no mezclar cuentas de distintos teléfonos. El conteo, la paginación y el CSV aplican los mismos filtros; el CSV exporta todas las páginas. **Desde / Hasta → Aplicar fechas** incluye ambos días según la zona horaria del navegador. **CSV de la vista** respeta equipo, SIM y fechas aplicadas; **CSV conjunto** y el CSV de un equipo exportan su historial completo, sin esos filtros adicionales.
 
 Las cuentas de `lines` se identifican por equipo, componente e identificador; su etiqueta es la más reciente recibida. No se crean opciones de SIM a partir de llamadas sin identidad de cuenta: esas filas siguen mostrando **No disponible**. El detalle de cada equipo reúne sus datos, cantidad de llamadas y cuentas conocidas; **Ver historial** abre **Llamadas** para ese equipo y limpia los filtros anteriores de SIM y fechas.
 
 **Resumen** muestra totales globales del historial y las últimas cinco llamadas. La atención por contacto se calcula en equipos activos con más de 30 minutos desde el último contacto, o sin contacto registrado; indica antigüedad del contacto y no confirma que un teléfono esté desconectado. Los equipos revocados se muestran aparte.
+
+### Analítica y reportes
+
+En **Analítica**, aplicar equipo, cuenta SIM/línea, tipo y fechas; después elegir métrica, agrupación y desglose. Las cuentas se identifican por equipo, componente e identificador. **Sin SIM identificada** agrupa registros sin identidad de cuenta. Los indicadores y gráficos usan únicamente las llamadas recibidas por este servidor; una ausencia de registros no demuestra que no se hicieron llamadas.
+
+Las fechas, los límites diarios y las semanas de Analítica usan **UTC−03:00 fijo**, con semanas desde el lunes. Esta zona se mantiene también en sus exportaciones, aunque el navegador o Windows utilicen otra. La comparación consulta el periodo anterior correspondiente entre los registros disponibles, sin garantizar que todos los teléfonos hayan enviado su historial completo. La duración media y la proporción de perdidas se recalculan a partir de registros, no promediando las medias o porcentajes de otros grupos.
+
+Cada reporte admite hasta 20.000 combinaciones de grupo y serie. Si se supera ese límite, reducir el periodo, filtrar un equipo o quitar el desglose; el servidor rechaza el reporte sin modificar los registros. Excel admite hasta 1.048.575 filas de datos más la cabecera; para un detalle mayor, usar CSV o reducir filtros.
+
+**Guardar vista** conserva los filtros aplicados y la configuración del gráfico; la selección temporal de un punto no forma parte de esa vista. **Administrar vistas** permite eliminar, deshacer y restaurar las predeterminadas. Se admiten hasta 16 vistas personalizadas con nombres de 50 caracteres. La biblioteca se guarda en SQLite y es compartida por las sesiones de administración de ese servidor. Eliminar una vista conserva llamadas y teléfonos. Si otra sesión guardó cambios, se rechaza la revisión anterior para evitar sobrescribirlos.
+
+**Descargar resumen** incluye todos los grupos y **Descargar detalle** todos los registros de los filtros y la selección actual del gráfico, no solo la página visible. Elegir **CSV** o **Excel (.xlsx)** junto a cada botón. Ocultar una serie en la leyenda cambia únicamente el gráfico. Los archivos respetan la selección del detalle y mantienen números telefónicos y otros textos como texto; los valores que podrían ejecutarse como fórmulas se neutralizan.
 
 Credenciales en `Authorization: Bearer TOKEN`. Ingreso con `Content-Type: application/json`:
 
@@ -187,7 +204,7 @@ Credenciales en `Authorization: Bearer TOKEN`. Ingreso con `Content-Type: applic
 
 Los campos `phone_account_id`, `phone_account_component_name` y `line_label` son opcionales, cadenas de hasta 256 caracteres. Los clientes anteriores siguen enviando sus seis campos y no borran información de línea ya recibida. Las migraciones añaden columnas sin eliminar historial, estado de sincronización, equipos ni credenciales. Los CSV conservan el orden anterior y añaden `sim_o_linea`, `cuenta_telefonica_id` y `cuenta_telefonica_componente` al final.
 
-La actualización del panel 1.3.0 conserva el esquema de la base 1.2.0 y el APK Android 1.2.0; basta actualizar el servidor y recargar el panel. Conserva llamadas, equipos, credenciales, certificados e IP.
+La actualización del panel 1.4.0 conserva el APK Android 1.2.0; basta actualizar el servidor y recargar el panel. Conserva llamadas, equipos, credenciales, certificados e IP, y añade almacenamiento para las vistas compartidas de Analítica.
 
 Para incorporar los datos de SIM en una app anterior a 1.2.0: actualizar primero el servidor y después instalar el APK 1.2.0 encima del anterior con la misma firma; abrir la app, conceder el permiso de nombres si se desea y pulsar **Actualizar → Sincronizar**. Se vuelve a consultar el historial y se reenvían las llamadas cuyos datos de línea se completaron. Las llamadas que ya no estén en el historial Android conservan sus datos previos; no se inventa su SIM. No desinstalar la app ni generar nuevos QR.
 
@@ -217,6 +234,8 @@ Verificación realizada el **30/10/2026**: APK debug compilado, pruebas Kotlin y
 La entrega **1.1.0** añade quince pruebas de servidor/configuración, instalación y ciclo de vida real de los servicios en Windows Server 2022 y cinco pruebas instrumentadas Android, incluyendo QR y TLS por servidor. Detalles y límites de verificación en [WINDOWS.md](WINDOWS.md#verificación-de-esta-entrega).
 
 Verificación **1.2.0, 04/11/2026**: 22 pruebas de servidor/configuración, pruebas JavaScript del panel, cuatro pruebas Kotlin y Lint sin errores. En Android 14 se verificaron seis pruebas de importación, migración Room e interfaz y dos de QR/TLS, incluido el envío real de dos cuentas distintas del mismo teléfono por HTTPS. Se comprobó el panel en escritorio y móvil con datos ficticios y el CSV filtrado. El APK genérico conserva el certificado de firma del APK público 1.1.0 y no incluye una CA local. Falta validar llamadas con dos SIM en teléfonos físicos; dos escenarios anteriores de Wi-Fi/control remoto no se repitieron en esta entrega.
+
+Verificación local **1.4.0, 04/11/2026**: 32 pruebas Python, pruebas JavaScript del panel y revisión de Analítica en Chrome de escritorio y móvil (320 y 390 píxeles). Se comprobaron gráficos, medias, comparación, SIM exacta, selección y paginación, descargas CSV/XLSX completas y vistas guardadas después de recargar. Una exportación demorada 6,5 segundos sobrevivió al refresco automático; cerrar sesión descartó una descarga pendiente. Los flujos del navegador conservaron los 2.220 registros ficticios y todos los equipos y hashes de credenciales del servidor de prueba. La publicación de paquetes requiere además el workflow Windows, que prueba la actualización real desde 1.3.0, rollback, reinstalación y conservación de datos y certificados. Android permanece en 1.2.0 y no se recompiló para esta entrega.
 
 Verificación local **1.3.0, 04/11/2026**: 24 pruebas Python, pruebas JavaScript de navegación, filtros, QR y aislamiento entre sesiones, y revisión real en Chrome de escritorio y móvil (320 y 390 píxeles). Se comprobaron detalle de equipo, historial, paginación, CSV filtrado, QR y solicitudes pendientes con datos ficticios. Las consultas de detalle y filtros no modifican el esquema, los registros ni las credenciales. Android permanece en 1.2.0 y no se recompiló para esta entrega.
 

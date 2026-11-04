@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>CallLog Control · Administración</title>
-  <link rel="stylesheet" href="/panel.css"><script src="/panel.js" defer></script>
+  <link rel="stylesheet" href="/panel.css"><link rel="stylesheet" href="/analytics.css"><script src="/analytics.js" defer></script><script src="/panel.js" defer></script>
 </head>
 <body>
   <header id="login-header" class="login-header"><a class="brand" href="#resumen">CallLog Control</a></header>
@@ -20,6 +20,7 @@
         <a id="nav-summary" class="navitem" href="#resumen" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>Resumen</a>
         <a id="nav-devices" class="navitem" href="#equipos"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/></svg>Equipos</a>
         <a id="nav-calls" class="navitem" href="#llamadas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h1M3 12h1M3 18h1"/></svg>Llamadas</a>
+        <a id="nav-analytics" class="navitem" href="#analitica"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v17h17M8 15v-4m5 4V7m5 8V4"/></svg>Analítica</a>
       </nav>
       <div class="aside-foot"><a id="nav-help" class="text-link" href="#ayuda">Ayuda y soporte</a><p>Servidor de la empresa<br>Red local · Wi-Fi</p></div>
     </aside>
@@ -67,10 +68,12 @@
           <div class="pagination"><div class="page-size"><label for="page-size">Registros por página</label><select id="page-size"><option value="25">25</option><option value="50" selected>50</option><option value="100">100</option><option value="200">200</option></select></div><div class="page-navigation"><button id="previous" disabled>Anterior</button><span id="page-info" role="status" aria-live="polite"></span><button id="next" disabled>Siguiente</button></div></div>
           <p class="note">Las fechas y los filtros del panel usan la zona horaria de este navegador; el CSV usa la del servidor e incluye su desplazamiento UTC. Los equipos con prefijo [PRUEBA] contienen datos ficticios y también aparecen en el CSV conjunto.</p>
         </section>
+        <section id="analytics-view" aria-labelledby="analytics-title" hidden><div id="analytics-root"></div></section>
         <section id="help-view" class="help" aria-labelledby="help-title" hidden>
           <h1 id="help-title" tabindex="-1">Ayuda y soporte</h1>
           <h2>Vincular un teléfono</h2><p>En Equipos, pulsa Agregar teléfono y genera un QR con su nombre. Desde la app Android desbloqueada, pulsa Vincular por QR y escanea únicamente el QR del servidor de tu empresa.</p>
           <h2>Consultar y exportar llamadas</h2><p>En Llamadas, selecciona equipo, SIM y fechas. Aplica las fechas antes de exportar. CSV de la vista incluye todas las páginas de la selección; CSV conjunto incluye todo el historial recibido.</p>
+          <h2>Analizar y guardar vistas</h2><p>En Analítica, filtra por fechas, equipo, SIM y tipo; cambia la métrica, agrupación, desglose y gráfico. Pulsa un grupo para consultar sus llamadas. Descargar resumen y Descargar detalle incluyen todas las páginas en CSV o Excel. Guarda tus filtros y gráficos como vistas del servidor y administra las vistas predeterminadas o personalizadas. Eliminar una vista conserva las llamadas. Analítica utiliza UTC−03:00 para fechas y agrupaciones, y muestra únicamente los registros recibidos.</p>
           <h2>Un equipo no responde</h2><p>Abre su detalle para revisar el último contacto, la última sincronización y las solicitudes. Más de 30 minutos sin contacto indica atención, no una desconexión confirmada. Comprueba Wi-Fi, permisos y restricciones de batería en Android.</p>
           <h2>Conservar la vinculación</h2><p>Esta navegación no modifica los teléfonos ni sus credenciales. No borres los datos de Android ni la carpeta de datos del servidor para resolver un problema. Los certificados, claves y registros se conservan durante las actualizaciones indicadas en la guía de instalación.</p>
         </section>

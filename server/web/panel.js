@@ -2,9 +2,9 @@
 (() => {
   const $ = id => document.getElementById(id);
   const obsolete = new Error("Solicitud de una sesión anterior descartada");
-  const views = {summary:"summary-view", devices:"devices-view", detail:"device-detail-view", calls:"calls-view", help:"help-view"};
-  const headings = {summary:"summary-title", devices:"devices-title", detail:"detail-name", calls:"calls-title", help:"help-title"};
-  const titles = {summary:"Resumen", devices:"Equipos", detail:"Equipos / Detalle", calls:"Llamadas", help:"Ayuda y soporte"};
+  const views = {summary:"summary-view", devices:"devices-view", detail:"device-detail-view", calls:"calls-view", analytics:"analytics-view", help:"help-view"};
+  const headings = {summary:"summary-title", devices:"devices-title", detail:"detail-name", calls:"calls-title", analytics:"analytics-title", help:"help-title"};
+  const titles = {summary:"Resumen", devices:"Equipos", detail:"Equipos / Detalle", calls:"Llamadas", analytics:"Analítica", help:"Ayuda y soporte"};
   const types = {1:"Entrante",2:"Saliente",3:"Perdida",4:"Buzón de voz",5:"Rechazada",6:"Bloqueada",7:"Contestada en otro equipo"};
   const date = value => value ? new Date(value).toLocaleString("es", {dateStyle:"short", timeStyle:"short"}) : "Sin dato";
   const lineName = line => line.line_label && line.phone_account_id ? `${line.line_label} (${line.phone_account_id})` : line.line_label || line.phone_account_id || "No disponible";
@@ -15,6 +15,22 @@
   let view = "summary", detailId = "", currentDetail = null, knownLines = [];
   let deviceFilter = "", lineFilter = "", dateFilters = new URLSearchParams(), offset = 0, pageSize = 50;
   let qrUrl = null, qrExpiry = null, qrSerial = 0;
+  const analytics = window.CallLogAnalytics.mount($("analytics-root"), {
+    json: async (path, options = {}) => {
+      const run = session, response = await api(path, options, run), data = await response.json();
+      if (run !== session) throw obsolete;
+      return data;
+    },
+    download: async (path, filename, valid = () => true) => {
+      const run = session, response = await api(path, {}, run), blob = await response.blob();
+      if (run !== session || view !== "analytics" || !valid()) throw obsolete;
+      const url = URL.createObjectURL(blob), anchor = document.createElement("a");
+      anchor.href = url; anchor.download = filename; document.body.append(anchor); anchor.click(); anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    },
+    isActive: () => Boolean(key) && view === "analytics",
+    onError: error => { if (error !== obsolete && key && view === "analytics") message(error.message, true); }
+  });
 
   function message(text = "", error = false) { $("message").textContent = text; $("message").classList.toggle("error", error); }
   function link(label, href) { const node = document.createElement("a"); node.textContent = label; node.href = href; node.className = "text-link"; return node; }
@@ -29,6 +45,7 @@
   }
   function logout(resetRoute = true) {
     session++; key = ""; refreshJob = null;
+    analytics.reset();
     clearInterval(timer); timer = null; closeEnrollment();
     $("workspace").hidden = true; $("login").hidden = false; $("login-header").hidden = false;
     for (const id of ["devices", "calls", "recent-calls", "attention-list"]) $(id).replaceChildren();
@@ -57,7 +74,8 @@
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       if (run !== session) throw obsolete;
-      throw Error(data.error || `El servidor respondió ${response.status}. Intenta de nuevo.`);
+      const error = Error(data.error || `El servidor respondió ${response.status}. Intenta de nuevo.`);
+      error.status = response.status; throw error;
     }
     return response;
   }
@@ -76,13 +94,14 @@
     return node;
   }
   function showRoute(focus = true, update = true) {
-    const hash = window.location.hash || "#resumen", oldDetail = detailId;
+    const hash = window.location.hash || "#resumen", oldDetail = detailId, oldView = view;
     detailId = "";
     const match = /^#equipos\/([^/?#]+)$/.exec(hash);
     if (match) { try { detailId = decodeURIComponent(match[1]); } catch (_) { detailId = ""; } }
-    view = detailId ? "detail" : ({"#equipos":"devices", "#llamadas":"calls", "#ayuda":"help"}[hash] || "summary");
+    view = detailId ? "detail" : ({"#equipos":"devices", "#llamadas":"calls", "#analitica":"analytics", "#ayuda":"help"}[hash] || "summary");
+    if (oldView === "analytics" && view !== "analytics") analytics.deactivate();
     for (const [name, id] of Object.entries(views)) $(id).hidden = name !== view;
-    for (const [name, id] of [["summary","nav-summary"], ["devices","nav-devices"], ["calls","nav-calls"], ["help","nav-help"]]) {
+    for (const [name, id] of [["summary","nav-summary"], ["devices","nav-devices"], ["calls","nav-calls"], ["analytics","nav-analytics"], ["help","nav-help"]]) {
       if (name === (view === "detail" ? "devices" : view)) $(id).setAttribute("aria-current", "page");
       else $(id).removeAttribute("aria-current");
     }
@@ -227,6 +246,8 @@
         $("result-summary").textContent = `${data.total} ${data.total === 1 ? "registro recibido" : "registros recibidos"}`;
         $("page-info").textContent = data.total ? `${offset + 1}–${offset + data.calls.length} de ${data.total} · Página ${Math.floor(offset / pageSize) + 1} de ${Math.ceil(data.total / pageSize)}` : "0 registros";
         $("previous").disabled = offset === 0; $("next").disabled = !data.has_more;
+      } else if (view === "analytics") {
+        await analytics.load(devices);
       } else if (view === "detail") {
         const requestedId = detailId;
         try {

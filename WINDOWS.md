@@ -2,13 +2,13 @@
 
 ## Descargar e instalar
 
-Descargar los archivos del servidor de [CallLog Control 1.3.0](https://github.com/WestMorris/CallLogControl/releases/tag/v1.3.0):
+Descargar los archivos del servidor de [CallLog Control 1.4.0](https://github.com/WestMorris/CallLogControl/releases/tag/v1.4.0):
 
-- **`CallLogControl-Setup-1.3.0-x64.exe`** para instalar el servidor con asistente.
-- **`CallLogControl-ServerUpdate-1.3.0.zip`** para actualizar solo el servidor de una instalación existente, conservando los teléfonos vinculados.
+- **`CallLogControl-Setup-1.4.0-x64.exe`** para instalar el servidor con asistente.
+- **`CallLogControl-ServerUpdate-1.4.0.zip`** para actualizar solo el servidor de una instalación existente, conservando los teléfonos vinculados.
 - `SHA256SUMS.txt` permite comprobar la integridad de las descargas.
 
-La entrega 1.3.0 actualiza solo el servidor y el panel; conserva el esquema de una base 1.2.0. Los teléfonos mantienen su app, historial, contraseña y vinculación: no reinstalar Android ni generar nuevos QR. Para teléfonos nuevos se mantiene el [APK Android 1.2.0](https://github.com/WestMorris/CallLogControl/releases/download/v1.2.0/CallLogControl-Android-1.2.0.apk). Los clientes anteriores también siguen sincronizando; la identificación de SIM requiere la app 1.2.0 o posterior.
+La entrega 1.4.0 actualiza solo el servidor y el panel y agrega almacenamiento para las vistas de Analítica. Los teléfonos mantienen su app, historial, contraseña y vinculación: no reinstalar Android ni generar nuevos QR. Para teléfonos nuevos se mantiene el [APK Android 1.2.0](https://github.com/WestMorris/CallLogControl/releases/download/v1.2.0/CallLogControl-Android-1.2.0.apk). Los clientes anteriores también siguen sincronizando; la identificación de SIM requiere la app 1.2.0 o posterior.
 
 Requiere **Windows 10/11 de 64 bits, Intel/AMD**, permisos de administrador y una red local que permita comunicación con los teléfonos. No requiere Docker, WSL, virtualización, Python instalado, Java ni Android Studio en el servidor. El instalador incluye los componentes; después de descargarlo se puede instalar sin Internet.
 
@@ -35,7 +35,7 @@ El QR incorpora la URL HTTPS y el certificado público de la autoridad del servi
 
 No hace falta escribir la URL, UUID o token del teléfono. Todos los teléfonos pueden usar el mismo APK genérico; cada uno escanea su propio QR. El nombre visible se elige en el panel al generar el alta. Las versiones anteriores a 1.1.0 requieren actualizarse para leerlo.
 
-**Actualizar una app anterior a 1.2.0:** mantener la misma firma Android. El APK 1.2.0 conserva la firma de desarrollo utilizada en las entregas anteriores de este proyecto; si se compiló una app propia en otro PC, puede tener otra clave. No desinstalar como primer recurso: se perderían su historial local y configuración. Conservar la clave propia y compilar el código nuevo si se necesita mantener esa firma. Al cambiar de servidor o equipo se vuelve a enviar el historial local; las llamadas recibidas en otro servidor no se trasladan solas. La actualización del servidor 1.3.0 no requiere este paso.
+**Actualizar una app anterior a 1.2.0:** mantener la misma firma Android. El APK 1.2.0 conserva la firma de desarrollo utilizada en las entregas anteriores de este proyecto; si se compiló una app propia en otro PC, puede tener otra clave. No desinstalar como primer recurso: se perderían su historial local y configuración. Conservar la clave propia y compilar el código nuevo si se necesita mantener esa firma. Al cambiar de servidor o equipo se vuelve a enviar el historial local; las llamadas recibidas en otro servidor no se trasladan solas. La actualización del servidor 1.4.0 no requiere este paso.
 
 Los teléfonos vinculados por QR conservan su certificado guardado. Si una compilación propia se configuró manualmente y confiaba únicamente en una CA incorporada al APK debug, recompilar la actualización con esa misma CA y firma siguiendo [WIFI.md](WIFI.md#compilar-e-instalar-el-apk); el APK genérico no incluye autoridades privadas de una instalación.
 
@@ -51,6 +51,7 @@ El menú separa el trabajo en estas vistas:
 - **Equipos:** lista de teléfonos y sus datos de sincronización, **Agregar teléfono**, CSV y solicitud de sincronización. **Ver detalle** abre los datos y las cuentas SIM/línea de ese equipo.
 - **Detalle del equipo:** identidad, contactos y cuentas conocidas, **Solicitar sincronización**, **CSV del equipo** y **Ver historial**. Este último abre **Llamadas** con el equipo seleccionado y sin filtros anteriores de SIM ni fechas.
 - **Llamadas:** historial conjunto o de un equipo, con filtros **Equipo**, **SIM / línea** y **Desde / Hasta → Aplicar fechas**. **Limpiar fechas** quita solo el rango de días.
+- **Analítica:** reportes filtrados por equipo, cuenta, tipo y fechas; gráficos, agrupaciones y comparación. Guardar y administrar vistas compartidas, o descargar el resumen y el detalle en CSV/Excel.
 
 La tabla de llamadas incluye **SIM / línea** y paginación con **Registros por página: 25, 50, 100 o 200**, botones Anterior/Siguiente, rango visible y total. Cambiar filtros o cantidad vuelve a la primera página. Las cuentas se distinguen por equipo, componente e identificador; seleccionar una SIM fija también su equipo. Se muestra el nombre más reciente e identificador que Android aporta; el identificador no equivale necesariamente al número de la línea o al slot SIM 1/2. Las filas sin identidad siguen mostrando **No disponible** y no generan una opción de SIM.
 
@@ -87,18 +88,18 @@ La carpeta queda restringida a administradores, SYSTEM y LocalService mediante p
 
 Para actualizar, ejecutar el instalador nuevo en la misma carpeta. Se detienen los servicios, se actualizan los archivos y se vuelven a iniciar, conservando configuración, registros y autoridad. Antes de actualizar, hacer una copia: detener **ambos servicios**, copiar toda la carpeta de ProgramData a un destino protegido y volver a iniciarlos. No copiar solo el archivo SQLite mientras se escribe en él.
 
-### Actualización 1.3.0 solo del servidor
+### Actualización 1.4.0 solo del servidor
 
-Para una instalación creada con el asistente 1.1.0 o posterior, el paquete **`CallLogControl-ServerUpdate-1.3.0.zip`** actualiza el servidor conservando los teléfonos vinculados. No requiere reinstalar el APK 1.2.0 ni cambiar su firma, y no cambia el esquema de una base 1.2.0:
+Para una instalación creada con el asistente 1.1.0 o posterior, el paquete **`CallLogControl-ServerUpdate-1.4.0.zip`** actualiza el servidor conservando los teléfonos vinculados y agrega las vistas guardadas de Analítica. No requiere reinstalar el APK 1.2.0 ni cambiar su firma:
 
 1. Extraer todo el ZIP en una carpeta del PC servidor distinta de la instalación y de ProgramData, por ejemplo una carpeta nueva en el escritorio.
 2. Abrir **`windows\Update-Server.cmd`** y aceptar la elevación de Windows. El script detecta la carpeta de instalación desde los servicios existentes. Si hace falta indicarla, ejecutar en PowerShell como administrador: `& '.\windows\Update-Server.ps1' -InstallDir 'C:\Program Files\CallLogControl'`.
 3. Esperar el mensaje **Servidor actualizado**. Abrir el panel y recargar la página.
-4. Comprobar las vistas **Resumen**, **Equipos** y **Llamadas**, seleccionar un equipo y descargar un CSV de prueba. Mantener los teléfonos y QR existentes.
+4. Comprobar **Resumen**, **Equipos**, **Llamadas** y **Analítica**; seleccionar un equipo y descargar un reporte de prueba. Mantener los teléfonos y QR existentes.
 
 Si todavía se usa una app anterior a 1.2.0 y se quiere identificar la SIM, instalar el APK 1.2.0 encima con su misma firma, sin desinstalar; abrir la app, pulsar **Autorizar nombres de SIM / línea** si aparece y **Actualizar → Sincronizar**. El permiso de nombres es opcional: sin él se usa el identificador disponible en el historial. Este paso pertenece a la incorporación de SIM de la entrega 1.2.0 y no es necesario para la reorganización del panel.
 
-Durante la actualización hay una interrupción breve de la sincronización. Se detienen ambos servicios y se guardan una copia del código y de SQLite con sus archivos asociados en **`C:\ProgramData\CallLogControl\backups\server-…`**. Solo se reemplazan `server.py`, `qrcodegen.py` y los archivos del panel. La base activa, credenciales, certificados, IP y configuración de servicios se conservan; los equipos registrados siguen usando su alta actual.
+Durante la actualización hay una interrupción breve de la sincronización. Se detienen ambos servicios y se guardan una copia del código y de SQLite con sus archivos asociados en **`C:\ProgramData\CallLogControl\backups\server-…`**. Se actualizan `server.py`, `qrcodegen.py`, `analytics.py` y los archivos del panel. La base activa, credenciales, certificados, IP y configuración de servicios se conservan; los equipos registrados siguen usando su alta actual. Las vistas guardadas también permanecen en la base.
 
 Si falla la comprobación de salud de la API y el esquema sigue igual, el script recupera el código anterior e intenta reiniciar los servicios. Si hubo migración, conserva el código nuevo para no arrancar una versión incompatible con la base; intenta reiniciarlo e informa el resultado o la necesidad de reparación. No restaura automáticamente una base antigua, para evitar borrar llamadas que ya se hayan confirmado. El respaldo permanece protegido dentro de ProgramData. Este paquete requiere una instalación existente del asistente; no es un instalador nuevo ni migra servidores manuales o Docker.
 
@@ -129,7 +130,7 @@ Para quienes desarrollan el proyecto: en Windows con PowerShell, instalar **Inno
 .\windows\Build-ServerUpdate.ps1
 ```
 
-Descarga las versiones fijadas y verifica sus SHA-256, empaqueta el runtime Python embebido, Caddy, WinSW, servidor y licencias y produce `build/windows/CallLogControl-Setup-1.3.0-x64.exe`. El usuario final no necesita estas herramientas. No incluye bases de datos, credenciales ni la instalación local del desarrollador.
+Descarga las versiones fijadas y verifica sus SHA-256, empaqueta el runtime Python embebido, Caddy, WinSW, servidor y licencias y produce `build/windows/CallLogControl-Setup-1.4.0-x64.exe`. El usuario final no necesita estas herramientas. No incluye bases de datos, credenciales ni la instalación local del desarrollador.
 
 `Build-ServerUpdate.ps1` produce el ZIP de actualización solo del servidor y su SHA-256 en la misma carpeta. Incluye únicamente código, scripts e instrucciones; no incorpora datos de una instalación local ni requiere descargar dependencias.
 
@@ -137,7 +138,9 @@ La automatización [Windows installer](https://github.com/WestMorris/CallLogCont
 
 ## Verificación de esta entrega
 
-La entrega 1.3.0 reorganiza el panel y añade consultas de detalle y filtros exactos de cuenta; conserva el esquema del servidor y el APK de la entrega 1.2.0. Antes de distribuir sus paquetes, ejecutar las pruebas de servidor/panel y el workflow Windows, incluida la conservación de datos y vinculación. Los resultados de las entregas anteriores se conservan a continuación como referencia histórica.
+La entrega 1.4.0 incorpora reportes reales sobre SQLite y vistas compartidas. Antes de distribuir sus paquetes, ejecutar pruebas HTTP de agregación, exportaciones CSV/XLSX y conservación de datos, más el workflow Windows de instalación y actualización. Android permanece en 1.2.0. Las pruebas y capturas usan datos ficticios; los reportes de una instalación real contienen su historial recibido.
+
+Como referencia histórica, la entrega 1.3.0 reorganizó el panel y añadió consultas de detalle y filtros exactos de cuenta, conservando el esquema del servidor y el APK de la entrega 1.2.0.
 
 La actualización 1.2.0 añade tres columnas mediante migraciones aditivas en Android y servidor. Las pruebas comprueban dos cuentas en el mismo equipo, recepción de clientes anteriores, conservación de llamadas y credenciales, CSV y tamaños de página. La prueba Windows incorpora el actualizador y comprueba acceso de los equipos, copia de SQLite, conservación de configuración y autoridad y recuperación segura cuando cambia el esquema. El workflow ejecuta parser PowerShell, pruebas de servidor/panel y servicios reales antes de distribuir los paquetes.
 

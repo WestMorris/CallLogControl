@@ -9,7 +9,7 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 }
 $dataDir = Join-Path $env:ProgramData 'CallLogControl'
 $source = Join-Path (Split-Path $PSScriptRoot -Parent) 'server'
-$names = @('server.py', 'qrcodegen.py', 'web')
+$names = @('server.py', 'qrcodegen.py', 'analytics.py', 'web')
 $services = @('CallLogControlHTTPS', 'CallLogControlAPI')
 foreach ($name in $services) {
     $service = Get-CimInstance Win32_Service -Filter "Name='$name'"
@@ -45,10 +45,10 @@ foreach ($path in @($source, $target, (Join-Path $dataDir 'data'))) {
 foreach ($name in $names) {
     if (-not (Test-Path -LiteralPath (Join-Path $source $name))) { throw "El paquete esta incompleto: $name" }
 }
-foreach ($name in @('index.html', 'panel.js', 'panel.css')) {
+foreach ($name in @('index.html', 'panel.js', 'panel.css', 'analytics.js', 'analytics.css')) {
     if (-not (Test-Path -LiteralPath (Join-Path $source "web\$name"))) { throw "El paquete esta incompleto: web\$name" }
 }
-& $python -c "import pathlib, sys; [compile(pathlib.Path(p).read_text(encoding='utf-8'), p, 'exec') for p in sys.argv[1:]]" (Join-Path $source 'server.py') (Join-Path $source 'qrcodegen.py')
+& $python -c "import pathlib, sys; [compile(pathlib.Path(p).read_text(encoding='utf-8'), p, 'exec') for p in sys.argv[1:]]" (Join-Path $source 'server.py') (Join-Path $source 'qrcodegen.py') (Join-Path $source 'analytics.py')
 if ($LASTEXITCODE -ne 0) { throw 'El codigo del paquete no se pudo validar; el servidor sigue sin cambios.' }
 function Stop-Server {
     foreach ($name in $services) {
@@ -70,6 +70,8 @@ function Replace-Code([string]$from) {
     foreach ($name in $names) {
         $destination = Join-Path $target $name
         if (Test-Path -LiteralPath $destination) { Remove-Item -LiteralPath $destination -Recurse -Force }
+        # Installations before 1.4.0 have no analytics module in their rollback copy.
+        if ($name -eq 'analytics.py' -and -not (Test-Path -LiteralPath (Join-Path $from $name))) { continue }
         Copy-Item -LiteralPath (Join-Path $from $name) -Destination $destination -Recurse
     }
 }

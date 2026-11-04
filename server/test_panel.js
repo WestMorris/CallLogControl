@@ -48,6 +48,13 @@ const location = {get hash() { return hash; }, set hash(value) {
 }};
 const history = {replaceState(_state, _title, value) { hash = value; }};
 const window = {location, history, addEventListener(name, callback) { browserEvents[name] = callback; }};
+const analyticsCalls = {loads:[], resets:0, departures:0};
+window.CallLogAnalytics = {mount(root, hooks) {
+  assert.equal(root.id, "analytics-root");
+  element("analytics-title");
+  return {load:async catalog => { assert.equal(hooks.isActive(), true); analyticsCalls.loads.push(catalog); },
+    reset:() => { analyticsCalls.resets++; }, deactivate:() => { analyticsCalls.departures++; }};
+}};
 const component = "com.android.phone/TelephonyConnectionService";
 const devices = [
   {id:"a", name:"Equipo A", active:1, call_count:125, last_seen_at:Date.now(), last_sync_at:Date.now(), sync_requested_id:null, sync_completed_id:null},
@@ -288,6 +295,15 @@ process.on("beforeExit", () => { if (!completed) { console.error("Panel test sto
   assert.equal(queryOf(lastCalls()).get("offset"), "25", "ordinary navigation keeps pagination");
   assert.equal(element("calls-view").hidden, false);
   assert.equal(element("summary-view").hidden, true);
+
+  await navigate("#analitica");
+  assert.equal(element("analytics-view").hidden, false);
+  assert.equal(element("calls-view").hidden, true);
+  assert.equal(element("nav-analytics").getAttribute("aria-current"), "page");
+  assert.equal(analyticsCalls.loads.at(-1).devices, devices);
+  await navigate("#llamadas");
+  assert.equal(analyticsCalls.departures, 1);
+  assert.equal(queryOf(lastCalls()).get("offset"), "25", "analytics navigation preserves calls pagination");
 
   blockDetail = true;
   await navigate("#equipos/a");
