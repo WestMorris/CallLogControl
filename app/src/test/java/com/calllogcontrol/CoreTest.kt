@@ -2,9 +2,18 @@ package com.calllogcontrol
 
 import org.junit.Assert.*
 import org.junit.Test
+import com.calllogcontrol.Database.CallRecord
 import java.security.MessageDigest
 
 class CoreTest {
+    @Test fun lineDisplayUsesTheRecordedAccount() {
+        val call = CallRecord("1", "+595991", 2, 1000, 30, 1)
+        assertEquals("No disponible", callLine(call))
+        assertEquals("SIM 2", callLine(call.copy(lineLabel = "SIM 2")))
+        assertEquals("account-2", callLine(call.copy(phoneAccountId = "account-2")))
+        assertEquals("SIM 2 (account-2)", callLine(call.copy(phoneAccountId = "account-2", lineLabel = "SIM 2")))
+    }
+
     @Test fun httpsOriginValidation() {
         assertEquals("https://example.com:8443", ServerAddress.normalize(" https://example.com:8443/ "))
         listOf("http://example.com", "https://user:secret@example.com", "https://example.com/api",

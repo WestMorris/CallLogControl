@@ -1,7 +1,7 @@
 "use strict";
 (() => {
   const $ = id => document.getElementById(id);
-  let key = "", timer = null, offset = 0, loading = false, refreshPending = false;
+  let key = "", timer = null, offset = 0, pageSize = 50, loading = false, refreshPending = false;
   let deviceFilter = "", dateFilters = new URLSearchParams();
   let qrUrl = null, qrExpiry = null;
   const date = value => value ? new Date(value).toLocaleString("es", {dateStyle:"short", timeStyle:"short"}) : "Sin dato";
@@ -13,6 +13,7 @@
     $("workspace").hidden = true; $("logout").hidden = true; $("login").hidden = false;
     $("devices").replaceChildren(); $("calls").replaceChildren(); $("device-filter").replaceChildren(new Option("Todos los equipos", ""));
     deviceFilter = ""; dateFilters = new URLSearchParams();
+    offset = 0; pageSize = 50; $("page-size").value = "50";
     $("date-from").value = ""; $("date-until").value = "";
     $("admin-key").value = "";
   }
@@ -94,20 +95,24 @@
       if (!devices.length) { const row = document.createElement("tr"); cell(row,"Todavía no hay equipos registrados.").colSpan = 6; $("devices").append(row); }
       $("device-filter").value = deviceFilter;
       const query = callQuery(deviceFilter);
-      const filters = query.toString(), pageOffset = offset;
+      const filters = query.toString(), pageOffset = offset, requestedSize = pageSize;
       query.set("offset", String(pageOffset));
+      query.set("limit", String(requestedSize));
       const data = await (await api(`/v1/calls?${query}`)).json();
-      if (!key || filters !== callQuery(deviceFilter).toString() || pageOffset !== offset) return;
+      if (!key || filters !== callQuery(deviceFilter).toString() || pageOffset !== offset || requestedSize !== pageSize) return;
       $("calls").replaceChildren();
       for (const call of data.calls) {
         const row = document.createElement("tr");
         cell(row,call.device_name); cell(row,call.presentation === 1 && call.number ? call.number : "Privado o desconocido");
+        const line = call.line_label && call.phone_account_id ? `${call.line_label} (${call.phone_account_id})` : call.line_label || call.phone_account_id;
+        const sim = cell(row, line || "No disponible");
+        if (call.phone_account_component_name) sim.title = call.phone_account_component_name;
         cell(row,types[call.type] || "Otra"); cell(row,date(call.started_at));
         cell(row,`${Math.floor(call.duration_seconds / 60)}m ${call.duration_seconds % 60}s`); $("calls").append(row);
       }
-      if (!data.calls.length) { const row = document.createElement("tr"); cell(row,"Sin llamadas recibidas para esta selección.").colSpan = 5; $("calls").append(row); }
+      if (!data.calls.length) { const row = document.createElement("tr"); cell(row,"Sin llamadas recibidas para esta selección.").colSpan = 6; $("calls").append(row); }
       $("result-summary").textContent = `${data.total} ${data.total === 1 ? "registro recibido" : "registros recibidos"}`;
-      $("page-info").textContent = data.total ? `${offset + 1}–${offset + data.calls.length} de ${data.total}` : "0 registros";
+      $("page-info").textContent = data.total ? `${offset + 1}–${offset + data.calls.length} de ${data.total} · Página ${Math.floor(offset / pageSize) + 1} de ${Math.ceil(data.total / pageSize)}` : "0 registros";
       $("previous").disabled = offset === 0; $("next").disabled = !data.has_more;
     } finally {
       loading = false;
@@ -160,8 +165,13 @@
     $("date-from").value = ""; $("date-until").value = "";
     applyDates(); message(); safeRefresh();
   });
-  $("previous").addEventListener("click", () => { offset = Math.max(0, offset - 50); safeRefresh(); });
-  $("next").addEventListener("click", () => { offset += 50; safeRefresh(); });
+  $("page-size").addEventListener("change", () => {
+    const selected = Number($("page-size").value);
+    pageSize = [25, 50, 100, 200].includes(selected) ? selected : 50;
+    $("page-size").value = String(pageSize); offset = 0; safeRefresh();
+  });
+  $("previous").addEventListener("click", () => { offset = Math.max(0, offset - pageSize); safeRefresh(); });
+  $("next").addEventListener("click", () => { offset += pageSize; safeRefresh(); });
   $("export-selected").addEventListener("click", () => download(deviceFilter, true).catch(error => message(error.message, true)));
   $("export-all").addEventListener("click", () => download().catch(error => message(error.message, true)));
 })();

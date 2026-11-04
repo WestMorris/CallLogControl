@@ -20,6 +20,9 @@ class WindowsRuntimeTest(unittest.TestCase):
                     'started_at': 1793361600000, 'duration_seconds': 10, 'presentation': 1}
             for device in devices:
                 store.ingest(device['device_id'], {'calls': [call]})
+            lines = [dict(call, phone_account_id='account-1', line_label='Personal'),
+                     dict(call, id='2', phone_account_id='account-2', line_label='Trabajo')]
+            store.ingest(devices[2]['device_id'], {'calls': lines})
             ca = root / 'caddy/pki/authorities/local/root.crt'
             ca.parent.mkdir(parents=True)
             ca.write_bytes(b'existing CA')
@@ -30,7 +33,10 @@ class WindowsRuntimeTest(unittest.TestCase):
             for device in devices:
                 self.assertEqual(runtime.Store(root / 'data').device_for(device['token']), device['device_id'])
             with store.connect() as db:
-                self.assertEqual(db.execute('SELECT COUNT(*) FROM calls').fetchone()[0], 3)
+                self.assertEqual(db.execute('SELECT COUNT(*) FROM calls').fetchone()[0], 4)
+                self.assertEqual([tuple(row) for row in db.execute(
+                    'SELECT phone_account_id,line_label FROM calls WHERE device_id=? ORDER BY id',
+                    (devices[2]['device_id'],))], [('account-1', 'Personal'), ('account-2', 'Trabajo')])
             self.assertEqual(ca.read_bytes(), b'existing CA')
             self.assertEqual((root / 'admin-key.txt').read_text().strip(), first['admin_token'])
             before = (root / 'config.json').read_bytes()

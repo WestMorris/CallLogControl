@@ -73,10 +73,16 @@ function Replace-Code([string]$from) {
         Copy-Item -LiteralPath (Join-Path $from $name) -Destination $destination -Recurse
     }
 }
+function Get-DatabaseSchema {
+    $version = & $python -c "import sqlite3, sys; db = sqlite3.connect(sys.argv[1]); print(db.execute('PRAGMA schema_version').fetchone()[0]); db.close()" (Join-Path $dataDir 'data\calls.sqlite3')
+    if ($LASTEXITCODE -ne 0) { throw 'No se pudo comprobar el esquema de SQLite.' }
+    return [int]$version
+}
 $backup = Join-Path $backupRoot ('server-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N'))
 $replacing = $false
 try {
     Stop-Server
+    $schemaBefore = Get-DatabaseSchema
     New-Item -ItemType Directory -Path $backup -Force | Out-Null
     Copy-Item -LiteralPath $target -Destination (Join-Path $backup 'server') -Recurse
     Copy-Item -LiteralPath (Join-Path $dataDir 'data') -Destination (Join-Path $backup 'data') -Recurse
@@ -90,14 +96,25 @@ try {
     Write-Host 'Abre http://127.0.0.1:8088/ y recarga el panel.'
 } catch {
     $failure = $_.Exception.Message
+    $recovery = 'servidor actual'
+    $schemaNotice = ''
     try {
         Stop-Server
-        if ($replacing) { Replace-Code (Join-Path $backup 'server') }
+        if ($replacing) {
+            if ((Get-DatabaseSchema) -eq $schemaBefore) {
+                Replace-Code (Join-Path $backup 'server')
+                $recovery = 'servidor anterior'
+            } else {
+                $recovery = 'servidor nuevo'
+                $schemaNotice = ' Se conservo el codigo nuevo porque cambio el esquema de SQLite.'
+            }
+        }
         # Keep the live database: restoring an old copy could erase acknowledged calls.
         Start-Api
         Start-Service CallLogControlHTTPS
+        (Get-Service CallLogControlHTTPS).WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
     } catch {
-        throw "Actualizacion fallida: $failure. Tampoco se pudo reiniciar el servidor anterior: $($_.Exception.Message). Respaldo: $backup"
+        throw "Actualizacion fallida: $failure.$schemaNotice Tampoco se pudo reiniciar el ${recovery}: $($_.Exception.Message). Respaldo: $backup"
     }
-    throw "Actualizacion fallida: $failure. Se reinicio el servidor anterior; los datos actuales se conservaron. Respaldo: $backup"
+    throw "Actualizacion fallida: $failure.$schemaNotice Se reinicio el $recovery; los datos actuales se conservaron. Respaldo: $backup"
 }

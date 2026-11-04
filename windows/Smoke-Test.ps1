@@ -61,6 +61,47 @@ try {
     } finally {
         Remove-Item -LiteralPath $broken -Recurse -Force
     }
+    $migrating = Join-Path $env:TEMP ('calllog-migrating-update-' + [guid]::NewGuid().ToString('N'))
+    try {
+        New-Item -ItemType Directory -Path (Join-Path $migrating 'windows') -Force | Out-Null
+        Copy-Item (Join-Path $installDir 'server') (Join-Path $migrating 'server') -Recurse
+        Copy-Item (Join-Path $PSScriptRoot 'Update-Server.ps1') (Join-Path $migrating 'windows')
+        $prefix = @'
+import os, sqlite3, time
+from pathlib import Path
+with sqlite3.connect(Path(os.environ['PROGRAMDATA']) / 'CallLogControl/data/calls.sqlite3') as db:
+    first = not db.execute("SELECT 1 FROM sqlite_master WHERE name='smoke_schema_migration'").fetchone()
+    if first:
+        db.execute("CREATE TABLE smoke_schema_migration (value TEXT NOT NULL)")
+        db.execute("INSERT INTO smoke_schema_migration VALUES ('preserve acknowledged test data')")
+db.close()
+while first:
+    time.sleep(1)  # The updater stops this unhealthy first start; the retry sees the marker.
+
+'@
+        $migratedCode = Join-Path $migrating 'server\server.py'
+        [IO.File]::WriteAllText($migratedCode, $prefix + [IO.File]::ReadAllText($migratedCode), [Text.UTF8Encoding]::new($false))
+        $migratedHash = (Get-FileHash $migratedCode).Hash
+        $rejection = ''
+        try { & (Join-Path $migrating 'windows\Update-Server.ps1') } catch { $rejection = $_.Exception.Message }
+        if ($rejection -notlike '*Se conservo el codigo nuevo porque cambio el esquema*') { throw 'No se detecto la migracion durante la recuperacion.' }
+        Check-Services
+        Verify-Existing
+        if ((Get-FileHash (Join-Path $installDir 'server\server.py')).Hash -ne $migratedHash) { throw 'Se restauro codigo anterior sobre una base migrada.' }
+        $markerCheck = "import sqlite3, sys; db = sqlite3.connect(sys.argv[1]); assert db.execute('SELECT value FROM smoke_schema_migration').fetchall() == [('preserve acknowledged test data',)]; db.close()"
+        py -3 -c $markerCheck (Join-Path $dataDir 'data\calls.sqlite3')
+        if ($LASTEXITCODE -ne 0) { throw 'Se perdieron datos de la base migrada.' }
+        if ((Get-FileHash (Join-Path $dataDir 'config.json')).Hash -ne $configBefore.Hash) { throw 'Cambio la configuracion al recuperar la migracion.' }
+        if ((Get-FileHash (Join-Path $dataDir 'caddy\pki\authorities\local\root.crt')).Hash -ne $caBefore.Hash) { throw 'Cambio la autoridad al recuperar la migracion.' }
+        & (Join-Path $PSScriptRoot 'Update-Server.ps1')
+        if ((Get-FileHash (Join-Path $installDir 'server\server.py')).Hash -ne $codeBefore.Hash) { throw 'No se restauro el codigo legitimo despues de la prueba.' }
+        Check-Services
+        Verify-Existing
+        py -3 -c $markerCheck (Join-Path $dataDir 'data\calls.sqlite3')
+        if ($LASTEXITCODE -ne 0) { throw 'La actualizacion posterior perdio datos de la migracion.' }
+    } finally {
+        Remove-Item -LiteralPath $migrating -Recurse -Force
+    }
     Install-Server
     Check-Services
     Verify-Existing

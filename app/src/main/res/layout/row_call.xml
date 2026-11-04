@@ -4,4 +4,5 @@
         <TextView android:id="@+id/synced" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#126D62" android:textSize="11sp" android:layout_marginStart="8dp" />
     </LinearLayout>
     <TextView android:id="@+id/details" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#526860" android:textSize="13sp" android:layout_marginTop="6dp" />
+    <TextView android:id="@+id/line" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#526860" android:textSize="13sp" android:layout_marginTop="4dp" />
 </LinearLayout>

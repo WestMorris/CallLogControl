@@ -32,8 +32,8 @@
           <button type="submit">Aplicar fechas</button><button id="clear-dates" type="button">Limpiar fechas</button>
         </form>
         <p id="filter-help" class="note filter-help">Hasta incluye todo el día. CSV de la vista exporta todos los registros del equipo y las fechas aplicadas. CSV conjunto y los botones CSV de cada equipo exportan su historial completo, sin filtro de fechas.</p>
-        <div class="table-wrap"><table><thead><tr><th>Equipo</th><th>Número</th><th>Tipo</th><th>Inicio</th><th>Duración</th></tr></thead><tbody id="calls"></tbody></table></div>
-        <div class="pagination"><button id="previous">Anterior</button><span id="page-info"></span><button id="next">Siguiente</button></div>
+        <div class="table-wrap"><table><thead><tr><th>Equipo</th><th>Número</th><th>SIM / línea</th><th>Tipo</th><th>Inicio</th><th>Duración</th></tr></thead><tbody id="calls"></tbody></table></div>
+        <div class="pagination"><div class="page-size"><label for="page-size">Registros por página</label><select id="page-size"><option value="25">25</option><option value="50" selected>50</option><option value="100">100</option><option value="200">200</option></select></div><div class="page-navigation"><button id="previous" disabled>Anterior</button><span id="page-info" role="status" aria-live="polite"></span><button id="next" disabled>Siguiente</button></div></div>
       </section>
       <p class="note">Los equipos con prefijo [PRUEBA] contienen datos ficticios y también aparecen en el CSV conjunto. Las fechas y los filtros del panel usan la zona horaria de este navegador; el CSV usa la del servidor e incluye su desplazamiento UTC.</p>
     </div>

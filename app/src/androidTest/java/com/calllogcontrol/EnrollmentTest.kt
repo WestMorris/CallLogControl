@@ -5,6 +5,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.calllogcontrol.Database.CallDatabase
 import com.calllogcontrol.Database.CallRecord
 import com.google.zxing.BinaryBitmap
+import com.google.zxing.DecodeHintType
 import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.common.HybridBinarizer
 import com.google.zxing.qrcode.QRCodeReader
@@ -69,7 +70,8 @@ class EnrollmentTest {
         val pixels = IntArray(width * width) { index ->
             if (bits[(index / width / 4) * size + index % width / 4] == '1') 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
         }
-        val decoded = QRCodeReader().decode(BinaryBitmap(HybridBinarizer(RGBLuminanceSource(width, width, pixels)))).text
+        val decoded = QRCodeReader().decode(BinaryBitmap(HybridBinarizer(RGBLuminanceSource(width, width, pixels))),
+            mapOf(DecodeHintType.PURE_BARCODE to true)).text
         val enrollment = Enrollment.parse(decoded)
         val security = SecurityStore(InstrumentationRegistry.getInstrumentation().targetContext)
         val dao = CallDatabase.get(InstrumentationRegistry.getInstrumentation().targetContext).calls()
@@ -84,13 +86,17 @@ class EnrollmentTest {
             val device = enrollment.claim()
             security.saveCredentials(enrollment.endpoint, device.getString("token"), enrollment.ca, device.getString("name"))
             assertThrows(java.io.IOException::class.java) { enrollment.claim() }
-            dao.put(CallRecord(id, "+595990000001", 2, System.currentTimeMillis(), 10, 1))
+            dao.put(CallRecord(id, "+595990000001", 2, System.currentTimeMillis(), 10, 1,
+                phoneAccountId = "integration-sim-1", phoneAccountComponentName = "com.android.phone/Telephony", lineLabel = "SIM 1"))
+            dao.put(CallRecord("$id-sim-2", "+595990000001", 2, System.currentTimeMillis(), 10, 1,
+                phoneAccountId = "integration-sim-2", phoneAccountComponentName = "com.android.phone/Telephony", lineLabel = "SIM 2"))
             assertEquals(androidx.work.ListenableWorker.Result.success(), SyncClient.sync(InstrumentationRegistry.getInstrumentation().targetContext))
             assertTrue(dao.find(id)?.synced == true)
+            assertTrue(dao.find("$id-sim-2")?.synced == true)
         } finally {
             security.disableSync()
             CallDatabase.get(InstrumentationRegistry.getInstrumentation().targetContext).openHelper.writableDatabase
-                .execSQL("DELETE FROM calls WHERE id=?", arrayOf(id))
+                .execSQL("DELETE FROM calls WHERE id IN (?,?)", arrayOf(id, "$id-sim-2"))
         }
     }
 }

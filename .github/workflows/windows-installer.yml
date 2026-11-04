@@ -36,14 +36,14 @@ jobs:
         run: ./windows/Build-ServerUpdate.ps1
       - name: Install and exercise real Windows services
         shell: powershell
-        run: ./windows/Smoke-Test.ps1 -SetupPath "$pwd/build/windows/CallLogControl-Setup-1.1.1-x64.exe"
+        run: ./windows/Smoke-Test.ps1 -SetupPath "$pwd/build/windows/CallLogControl-Setup-1.2.0-x64.exe"
       - name: Publish installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CallLogControl-Windows-1.1.1
+          name: CallLogControl-Windows-1.2.0
           path: |
-            build/windows/CallLogControl-Setup-1.1.1-x64.exe
-            build/windows/CallLogControl-ServerUpdate-1.1.1.zip
-            build/windows/CallLogControl-ServerUpdate-1.1.1.zip.sha256
+            build/windows/CallLogControl-Setup-1.2.0-x64.exe
+            build/windows/CallLogControl-ServerUpdate-1.2.0.zip
+            build/windows/CallLogControl-ServerUpdate-1.2.0.zip.sha256
           if-no-files-found: error
           retention-days: 14

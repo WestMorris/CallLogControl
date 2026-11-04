@@ -55,7 +55,8 @@ object SyncClient {
                     batch.forEach { call ->
                         calls.put(JSONObject().put("id", call.id).put("number", call.number).put("type", call.type)
                             .put("started_at", call.startedAt).put("duration_seconds", call.durationSeconds)
-                            .put("presentation", call.presentation))
+                            .put("presentation", call.presentation).put("phone_account_id", call.phoneAccountId)
+                            .put("phone_account_component_name", call.phoneAccountComponentName).put("line_label", call.lineLabel))
                     }
                     val code = request(endpoint, token, "/v1/calls", JSONObject().put("calls", calls), ca = ca).first
                     if (code != 204) throw HttpError(code)

@@ -238,7 +238,7 @@ Permitir TCP 8443 desde la LAN en el firewall y seguir la compilación. Para det
 
 ## Compilar e instalar el APK
 
-**Con QR no es necesario compilar:** descargar el APK genérico 1.1.0 de [la entrega](https://github.com/WestMorris/CallLogControl/releases/tag/v1.1.0), instalar y vincular desde el panel. Si se compila desde el código, también puede usarse QR sin incorporar ningún certificado al APK, incluso en una variante `release` firmada por el administrador.
+**Con QR no es necesario compilar:** descargar el APK genérico 1.2.0 de [la entrega](https://github.com/WestMorris/CallLogControl/releases/tag/v1.2.0), instalar y vincular desde el panel. Los teléfonos ya vinculados conservan su alta al instalar encima con la misma firma. Si se compila desde el código, también puede usarse QR sin incorporar ningún certificado al APK, incluso en una variante `release` firmada por el administrador.
 
 Para la **configuración manual con una autoridad local**, el archivo `app/src/debug/res/raw/calllog_wifi_ca.crt` debe existir antes de compilar. En una copia limpia de GitHub no está: es propio de cada servidor. Sin él y sin alta QR, la app solo confía en autoridades del sistema y rechazará este HTTPS local. La variante `release` no incluye esa confianza de depuración; sí permite la confianza específica configurada mediante QR.
 
@@ -258,7 +258,7 @@ macOS/Linux:
 ./gradlew :app:assembleDebug --max-workers=2
 ```
 
-El APK queda en `app/build/outputs/apk/debug/app-debug.apk` (versión actual **1.1.0**). Transferirlo al teléfono e instalarlo manualmente. Autorizar la instalación desde esa fuente cuando Android lo solicite. Referencia: [compilación por línea de comandos Android](https://developer.android.com/build/building-cmdline).
+El APK queda en `app/build/outputs/apk/debug/app-debug.apk` (versión actual **1.2.0**). Transferirlo al teléfono e instalarlo manualmente. Autorizar la instalación desde esa fuente cuando Android lo solicite. Para actualizar, instalar primero el servidor 1.2.0 y después el APK encima con la misma firma, sin desinstalar ni volver a vincular. Referencia: [compilación por línea de comandos Android](https://developer.android.com/build/building-cmdline).
 
 **Actualizaciones desde otro PC:** Android exige la misma clave de firma. Cada PC suele generar su propio `debug.keystore`; un APK compilado en Windows puede no instalarse encima del anterior compilado en macOS. Conservar y usar la clave original de forma privada para actualizar sin borrar datos. No desinstalar como primer recurso: elimina el historial local y la configuración. Antes de una reinstalación deliberada, sincronizar y exportar lo necesario. Actualizar solo la app no traslada al nuevo servidor los registros que ya estaban en el anterior.
 
@@ -279,6 +279,8 @@ Para conservar el alta manual con JSON y token:
 La app `debug` admite credenciales de prueba de 10 caracteres; `release` exige al menos 32. Conservar las credenciales aleatorias que genera el servidor y emitir una distinta para cada teléfono. Su nombre visible se asigna con `register-device --name`, no con el UUID. Reutilizar un token mezcla los teléfonos bajo el mismo equipo.
 
 ## Panel web y exportaciones CSV
+
+La tabla muestra **SIM / línea** y permite elegir **25, 50, 100 o 200 registros por página**, con botones Anterior/Siguiente y rango/total. Los CSV exportan todos los registros que coincidan con el filtro, independientemente de la página o cantidad seleccionada. App y CSV incluyen el nombre e identificador de la cuenta de cada llamada que Android proporciona; sin ese dato aparece **No disponible**. Actualizar e importar de nuevo puede completar llamadas antiguas que sigan en el historial Android. Los CSV añaden `sim_o_linea`, `cuenta_telefonica_id` y `cuenta_telefonica_componente` al final de las columnas existentes.
 
 En el propio servidor, abrir **[http://127.0.0.1:8088](http://127.0.0.1:8088)**. Introducir el valor `CALLLOG_ADMIN_TOKEN` de `.env.wifi`, sin el nombre de la variable. La credencial del teléfono no sirve para administrar.
 

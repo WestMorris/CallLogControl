@@ -212,10 +212,11 @@ class MainActivity : ComponentActivity() {
 
     private fun explainCollection() {
         dialog = AlertDialog.Builder(this).setTitle("Acceso al historial")
-            .setMessage("Se importarán las llamadas existentes y futuras: número, fecha, tipo y duración. No se graba audio. Se guardan en este equipo; solo se envían al configurar tu servidor. La captura autorizada continúa con la app bloqueada. Puedes detenerla revocando el permiso en Android.")
+            .setMessage("Se importarán las llamadas existentes y futuras: número, fecha, tipo, duración y cuenta SIM o línea utilizada. El permiso de números telefónicos permite consultar el nombre de esa cuenta; si lo rechazas se conserva el identificador que aporte el historial. No se graba audio. Se guardan en este equipo; solo se envían al configurar tu servidor. La captura autorizada continúa con la app bloqueada. Puedes detenerla revocando el permiso en Android.")
             .setNegativeButton("Cancelar", null).setPositiveButton("Autorizar") { _, _ ->
                 security.acceptCollection()
-                val permissions = mutableListOf(Manifest.permission.READ_CALL_LOG, Manifest.permission.READ_PHONE_STATE)
+                val permissions = mutableListOf(Manifest.permission.READ_CALL_LOG, Manifest.permission.READ_PHONE_STATE,
+                    Manifest.permission.READ_PHONE_NUMBERS)
                 if (Build.VERSION.SDK_INT >= 33) permissions.add(Manifest.permission.POST_NOTIFICATIONS)
                 permissionRequest.launch(permissions.toTypedArray())
             }.setNeutralButton("Ajustes de Android") { _, _ ->
@@ -226,11 +227,14 @@ class MainActivity : ComponentActivity() {
     private fun refreshStatus() {
         val prefs = getSharedPreferences("status", MODE_PRIVATE)
         val permitted = security.consented && CallImporter.permitted(this)
-        binding.permissions.isVisible = !permitted
+        val canReadLineNames = checkSelfPermission(Manifest.permission.READ_PHONE_NUMBERS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        binding.permissions.isVisible = !permitted || !canReadLineNames
+        binding.permissions.text = if (permitted) "Autorizar nombres de SIM / línea" else "Autorizar acceso al historial"
         binding.remoteSync.text = if (RemoteSyncService.running) "Detener control remoto" else "Activar control remoto"
         val imported = prefs.getLong("last_import", 0)
         val synced = prefs.getLong("last_sync", 0)
         val lines = mutableListOf(if (permitted) "Captura autorizada · actualización en segundo plano" else "Sin acceso al historial")
+        if (permitted && !canReadLineNames) lines.add("SIM / línea: se usa el identificador del historial; autoriza el permiso para consultar su nombre.")
         if (imported > 0) lines.add("Última lectura: ${dateTime(imported)}")
         if (security.endpoint.isEmpty()) lines.add("Servidor sin configurar · almacenamiento local")
         else lines.add(if (synced > 0) "Último envío: ${dateTime(synced)}" else "Servidor configurado · esperando primer envío")
@@ -367,5 +371,6 @@ private class CallsAdapter : ListAdapter<CallRecord, CallsAdapter.Holder>(object
         holder.binding.number.text = if (call.presentation == 1 && call.number.isNotBlank()) call.number else "Número privado o desconocido"
         holder.binding.synced.text = if (call.synced) "Enviado" else "Local"
         holder.binding.details.text = "${callType(call.type)} · ${dateTime(call.startedAt)} · ${call.durationSeconds / 60}m ${call.durationSeconds % 60}s"
+        holder.binding.line.text = "SIM / línea: ${callLine(call)}"
     }
 }

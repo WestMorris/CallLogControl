@@ -25,6 +25,7 @@ MAX_BODY = 256 * 1024
 MAX_BATCH = 500
 CALL_TYPES = {1: "Entrante", 2: "Saliente", 3: "Perdida", 4: "Buzón de voz",
               5: "Rechazada", 6: "Bloqueada", 7: "Contestada en otro equipo"}
+LINE_FIELDS = ("phone_account_id", "phone_account_component_name", "line_label")
 
 
 def token_hash(token):
@@ -88,6 +89,10 @@ class Store:
                                ("sync_requested_id", "TEXT"), ("sync_completed_id", "TEXT")]:
                 if name not in columns:
                     db.execute(f"ALTER TABLE devices ADD COLUMN {name} {kind}")
+            columns = {row["name"] for row in db.execute("PRAGMA table_info(calls)")}
+            for name in LINE_FIELDS:
+                if name not in columns:
+                    db.execute(f"ALTER TABLE calls ADD COLUMN {name} TEXT NOT NULL DEFAULT ''")
         os.chmod(self.path, 0o600)
 
     @contextmanager
@@ -175,7 +180,7 @@ class Store:
         rows = []
         for call in calls:
             keys = {"id", "number", "type", "started_at", "duration_seconds", "presentation"}
-            if not isinstance(call, dict) or set(call) != keys:
+            if not isinstance(call, dict) or not keys <= set(call) or set(call) - keys - set(LINE_FIELDS):
                 raise ValueError("Campos de llamada incorrectos")
             if not isinstance(call["id"], str) or not 1 <= len(call["id"]) <= 120:
                 raise ValueError("Identificador inválido")
@@ -186,14 +191,25 @@ class Store:
                 value = call[field]
                 if type(value) is not int or not lower <= value <= upper:
                     raise ValueError(f"{field} inválido")
+            for field in LINE_FIELDS:
+                if field in call and (not isinstance(call[field], str) or len(call[field]) > 256):
+                    raise ValueError(f"{field} inválido")
+            # Omitted fields preserve line data already sent by newer apps.
+            line_values = tuple(call.get(field) for field in LINE_FIELDS)
             rows.append((device_id, call["id"], call["number"], call["type"],
-                         call["started_at"], call["duration_seconds"], call["presentation"]))
+                         call["started_at"], call["duration_seconds"], call["presentation"],
+                         *line_values, *line_values))
         with self.connect() as db:
             db.executemany("""
-                INSERT INTO calls VALUES (?,?,?,?,?,?,?)
+                INSERT INTO calls (device_id,id,number,type,started_at,duration_seconds,presentation,
+                    phone_account_id,phone_account_component_name,line_label)
+                VALUES (?,?,?,?,?,?,?,COALESCE(?,''),COALESCE(?,''),COALESCE(?,''))
                 ON CONFLICT(device_id,id) DO UPDATE SET number=excluded.number,
                   type=excluded.type, started_at=excluded.started_at,
-                  duration_seconds=excluded.duration_seconds, presentation=excluded.presentation
+                  duration_seconds=excluded.duration_seconds, presentation=excluded.presentation,
+                  phone_account_id=COALESCE(?,calls.phone_account_id),
+                  phone_account_component_name=COALESCE(?,calls.phone_account_component_name),
+                  line_label=COALESCE(?,calls.line_label)
             """, rows)
             db.execute("UPDATE devices SET last_seen_at=?,last_sync_at=? WHERE id=?",
                        (int(time.time() * 1000), int(time.time() * 1000), device_id))
@@ -405,7 +421,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(200, {"devices": [dict(row) for row in rows]})
         if url.path == "/v1/calls":
             params = parse_qs(url.query, keep_blank_values=True)
-            if set(params) - {"device_id", "offset", "started_from", "started_before"} or any(len(v) != 1 for v in params.values()):
+            if set(params) - {"device_id", "offset", "limit", "started_from", "started_before"} or any(len(v) != 1 for v in params.values()):
                 return self.reply(400, {"error": "Filtros inválidos"})
             try:
                 offset = int(params.get("offset", ["0"])[0])
@@ -414,6 +430,12 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 return self.reply(400, {"error": "offset inválido"})
             try:
+                limit = int(params.get("limit", ["50"])[0])
+                if not 1 <= limit <= 200:
+                    raise ValueError()
+            except ValueError:
+                return self.reply(400, {"error": "limit debe estar entre 1 y 200"})
+            try:
                 where, values = call_filters(params)
             except ValueError as error:
                 return self.reply(400, {"error": str(error)})
@@ -421,7 +443,7 @@ class Handler(BaseHTTPRequestHandler):
                 total = db.execute("SELECT COUNT(*) FROM calls c" + where, values).fetchone()[0]
                 rows = db.execute("""SELECT c.*,d.name AS device_name FROM calls c
                     JOIN devices d ON d.id=c.device_id""" + where +
-                    " ORDER BY c.started_at DESC,c.device_id,c.id LIMIT 50 OFFSET ?", values + (offset,)).fetchall()
+                    " ORDER BY c.started_at DESC,c.device_id,c.id LIMIT ? OFFSET ?", values + (limit, offset)).fetchall()
             return self.reply(200, {"calls": [dict(row) for row in rows], "total": total,
                                     "has_more": offset + len(rows) < total})
         if url.path != "/v1/export.csv":
@@ -438,7 +460,8 @@ class Handler(BaseHTTPRequestHandler):
             if device is not None and not db.execute("SELECT 1 FROM devices WHERE id=?", (device,)).fetchone():
                 return self.reply(404, {"error": "Equipo inexistente"})
             rows = db.execute("""SELECT d.id,d.name,c.id,c.number,c.type,c.started_at,
-                c.duration_seconds,c.presentation FROM calls c JOIN devices d ON d.id=c.device_id"""
+                c.duration_seconds,c.presentation,c.phone_account_id,c.phone_account_component_name,
+                c.line_label FROM calls c JOIN devices d ON d.id=c.device_id"""
                 + where + " ORDER BY c.started_at DESC,d.id,c.id", values)
             self.send_response(200)
             self.send_header("Content-Type", "text/csv; charset=utf-8")
@@ -450,17 +473,20 @@ class Handler(BaseHTTPRequestHandler):
             buffer = io.StringIO(newline="")
             writer = csv.writer(buffer)
             writer.writerow(["equipo_id", "equipo", "llamada_id", "numero", "tipo",
-                             "inicio_unix_ms", "duracion_segundos", "presentacion", "inicio", "zona_horaria_inicio"])
+                             "inicio_unix_ms", "duracion_segundos", "presentacion", "inicio", "zona_horaria_inicio",
+                             "sim_o_linea", "cuenta_telefonica_id", "cuenta_telefonica_componente"])
             self.wfile.write(buffer.getvalue().encode())
             for row in rows:
                 buffer.seek(0)
                 buffer.truncate()
-                values = list(row)
+                values = list(row[:8])
                 values[4] = CALL_TYPES[values[4]]
                 started = datetime.fromtimestamp(values[5] / 1000, timezone.utc).astimezone()
                 utc_offset = started.strftime("%z")
+                account_id, component, label = row[8:]
+                line = f"{label} ({account_id})" if label and account_id else label or account_id or "No disponible"
                 values.extend([started.strftime("%Y-%m-%d %H:%M:%S"),
-                               f"UTC{utc_offset[:3]}:{utc_offset[3:]}"])
+                               f"UTC{utc_offset[:3]}:{utc_offset[3:]}", line, account_id, component])
                 writer.writerow([csv_cell(v) for v in values])
                 self.wfile.write(buffer.getvalue().encode())
 

@@ -2,8 +2,11 @@ package com.calllogcontrol
 
 import android.Manifest
 import android.content.Context
+import android.content.ComponentName
 import android.content.pm.PackageManager
 import android.provider.CallLog
+import android.telecom.PhoneAccountHandle
+import android.telecom.TelecomManager
 import com.calllogcontrol.Database.CallDatabase
 import com.calllogcontrol.Database.CallRecord
 import kotlinx.coroutines.sync.Mutex
@@ -18,15 +21,28 @@ object CallImporter {
         if (!SecurityStore(context).consented || !permitted(context)) return@withLock
         val dao = CallDatabase.get(context).calls()
         val fields = arrayOf(CallLog.Calls._ID, CallLog.Calls.NUMBER, CallLog.Calls.TYPE,
-            CallLog.Calls.DATE, CallLog.Calls.DURATION, CallLog.Calls.NUMBER_PRESENTATION)
+            CallLog.Calls.DATE, CallLog.Calls.DURATION, CallLog.Calls.NUMBER_PRESENTATION,
+            CallLog.Calls.PHONE_ACCOUNT_ID, CallLog.Calls.PHONE_ACCOUNT_COMPONENT_NAME)
+        val telecom = context.getSystemService(TelecomManager::class.java)
+        val labels = mutableMapOf<Pair<String, String>, String>()
         val cursor = context.contentResolver.query(CallLog.Calls.CONTENT_URI, fields, null, null, "${CallLog.Calls.DATE} ASC")
             ?: throw java.io.IOException("Historial no disponible")
         cursor.use {
             val batch = ArrayList<CallRecord>(200)
             while (it.moveToNext()) {
                 val started = it.getLong(3)
+                val accountId = it.getString(6).orEmpty()
+                val componentName = it.getString(7).orEmpty()
+                val label = labels.getOrPut(componentName to accountId) {
+                    val component = ComponentName.unflattenFromString(componentName)
+                    if (component == null || accountId.isEmpty()) ""
+                    else try {
+                        telecom?.getPhoneAccount(PhoneAccountHandle(component, accountId))?.label?.toString().orEmpty().take(256)
+                    } catch (_: SecurityException) { "" }
+                }
                 batch.add(CallRecord("${it.getLong(0)}-$started", it.getString(1).orEmpty(),
-                    it.getInt(2), started, it.getLong(4).coerceAtLeast(0), it.getInt(5)))
+                    it.getInt(2), started, it.getLong(4).coerceAtLeast(0), it.getInt(5),
+                    phoneAccountId = accountId, phoneAccountComponentName = componentName, lineLabel = label))
                 if (batch.size == 200) { dao.merge(batch); batch.clear() }
             }
             if (batch.isNotEmpty()) dao.merge(batch)

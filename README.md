@@ -4,16 +4,16 @@ App Android en Kotlin y microservicio para registrar el historial de llamadas de
 
 **Instalar en Windows, macOS o Linux por Wi-Fi:** ver [WIFI.md](WIFI.md). Incluye una guía de PowerShell para **Windows sin Docker**, alternativas con Docker, HTTPS local, firewall, compilación del APK y CSV individual y conjunto. El servidor nativo solo necesita Python 3.11+ y Caddy 2; no requiere virtualización.
 
-**Windows con asistente:** descargar el instalador o el ZIP de actualización del servidor de [la versión 1.1.1](https://github.com/WestMorris/CallLogControl/releases/tag/v1.1.1) y seguir [WINDOWS.md](WINDOWS.md). Los teléfonos existentes conservan la app y su vinculación. Para teléfonos nuevos se mantiene el [APK genérico 1.1.0](https://github.com/WestMorris/CallLogControl/releases/download/v1.1.0/CallLogControl-Android-1.1.0.apk). El instalador incluye Python y Caddy, configura servicios y firewall y conserva los datos al actualizar. El alta por QR evita escribir URL o tokens y compilar un APK por servidor.
+**Windows con asistente:** descargar el instalador o el ZIP de actualización del servidor y el [APK genérico de la versión 1.2.0](https://github.com/WestMorris/CallLogControl/releases/tag/v1.2.0) y seguir [WINDOWS.md](WINDOWS.md). Actualizar primero el servidor y después instalar el APK encima del anterior, con la misma firma, para conservar historial y vinculación. El instalador incluye Python y Caddy, configura servicios y firewall y conserva los datos al actualizar. El alta por QR evita escribir URL o tokens y compilar un APK por servidor.
 
 ## Qué incluye
 
 - Contraseña local creada en el primer inicio, con PBKDF2-HMAC-SHA256, sal aleatoria y espera de 30 segundos tras cinco errores. Se bloquea al abandonar la app. No hay contraseña predeterminada ni recuperación.
-- Historial local con Room: número, tipo, fecha, duración y presentación del número. No graba audio ni lee contactos, SMS o ubicación.
+- Historial local con Room: número, tipo, fecha, duración, presentación del número y cuenta SIM/línea utilizada. No graba audio ni lee contactos, SMS o ubicación.
 - Autorización explícita antes de importar las llamadas existentes y futuras. La captura continúa con la pantalla de la app bloqueada mientras conserva el permiso.
 - `CallReceiver.kt` programa una importación al terminar la llamada. WorkManager vuelve a consultar el historial aproximadamente cada 15 minutos y al abrir la app desbloqueada.
 - `CallService.kt` hace una importación manual breve con notificación visible. No mantiene un servicio permanente.
-- Panel administrativo local: equipos, llamadas paginadas, filtros por equipo y fechas, CSV y solicitudes remotas. Ver [WIFI.md](WIFI.md).
+- Panel administrativo local: equipos, llamadas con SIM/línea, paginación con selector de 25, 50, 100 o 200 registros, filtros por equipo y fechas, CSV y solicitudes remotas. Ver [WIFI.md](WIFI.md).
 - Alta desde el panel con nombre y QR de un solo uso, válido cinco minutos. La app 1.1.0 escanea con cámara y configura la URL, la credencial del teléfono y una autoridad TLS limitada a ese servidor, sin instalar certificados en Android.
 - `RemoteSyncService.kt` ofrece un modo opcional de control remoto inmediato por Wi-Fi, con servicio visible, notificación permanente y mayor consumo de batería. Debe activarse en la app y permitir batería sin restricciones.
 - Pantalla de las últimas 200 llamadas, totales globales y pendientes. CSV local con **todos** los registros, guardado mediante el selector de archivos de Android.
@@ -147,7 +147,7 @@ El CSV del servidor conserva `equipo_id`, `equipo`, `llamada_id`, `numero`, `tip
 | `GET /v1/devices` | Administrador | Lista de equipos y conteos |
 | `POST /v1/enrollments` | Administrador | `{"name":"Ventas 01"}` genera un QR con URL, autoridad y código temporal |
 | `POST /v1/enrollments/claim` | Código del QR | Cuerpo `{}`; canje atómico por un teléfono con credencial propia, una sola vez |
-| `GET /v1/calls?device_id=...&offset=0` | Administrador | Página de 50 llamadas; filtro opcional |
+| `GET /v1/calls?device_id=...&offset=0&limit=50` | Administrador | Página de llamadas; `limit` de 1 a 200, predeterminado 50; filtro opcional |
 | `POST /v1/devices/{id}/sync` | Administrador | Encola una solicitud y devuelve `202` con `request_id` |
 | `GET /v1/sync-request?wait=25` | Equipo activo | Espera hasta 25 segundos una solicitud pendiente |
 | `POST /v1/sync-ack` | Equipo activo | Confirma `{"request_id":"UUID"}` después de importar y enviar todos los pendientes |
@@ -167,7 +167,10 @@ Credenciales en `Authorization: Bearer TOKEN`. Ingreso con `Content-Type: applic
       "type": 2,
       "started_at": 1793361600000,
       "duration_seconds": 87,
-      "presentation": 1
+      "presentation": 1,
+      "phone_account_id": "cuenta-sim-2",
+      "phone_account_component_name": "com.android.phone/com.android.services.telephony.TelephonyConnectionService",
+      "line_label": "SIM 2"
     }
   ]
 }
@@ -175,7 +178,11 @@ Credenciales en `Authorization: Bearer TOKEN`. Ingreso con `Content-Type: applic
 
 `id` combina el ID del proveedor Android y la fecha para evitar colisiones si el proveedor reutiliza IDs. La clave del servidor es `(equipo_id, llamada_id)`. Repetir una llamada actualiza sus datos; no crea otra fila. No se admite enviar un `equipo_id` en el cuerpo ni atribuir llamadas a otro equipo.
 
-**Equipos con dos SIM:** la app consulta el historial completo del perfil Android, sin filtrar por chip. Las llamadas de ambas líneas que Android exponga se reúnen bajo el mismo equipo. Actualmente no se guarda la SIM de origen; no es posible separar líneas ni reconstruir esa información en el servidor. CSV y filtros se pueden actualizar solo en el servidor, conservando los teléfonos vinculados. Identificar la SIM requeriría una actualización posterior de la app; instalar encima con la misma firma permite conservar su configuración.
+**SIM o línea por llamada (1.2.0):** la app lee `PHONE_ACCOUNT_ID` y `PHONE_ACCOUNT_COMPONENT_NAME` del historial de cada llamada, sin asignar la SIM predeterminada del teléfono. Guarda esa identidad y, cuando Android lo permite, el nombre de la cuenta. App, panel y ambos CSV muestran **SIM / línea** como nombre e identificador, o **No disponible** si faltan. El identificador puede ser interno; no equivale necesariamente al número telefónico ni al slot SIM 1/2. El permiso opcional `READ_PHONE_NUMBERS` permite obtener el nombre mediante `TelecomManager.getPhoneAccount`; rechazarlo no impide importar la identidad disponible en el historial. Referencias: [cuenta de la llamada](https://developer.android.com/reference/android/provider/CallLog.Calls#PHONE_ACCOUNT_ID), [nombre de la cuenta y permiso](https://developer.android.com/reference/android/telecom/TelecomManager#getPhoneAccount(android.telecom.PhoneAccountHandle)).
+
+Los campos `phone_account_id`, `phone_account_component_name` y `line_label` son opcionales, cadenas de hasta 256 caracteres. Los clientes anteriores siguen enviando sus seis campos y no borran información de línea ya recibida. Las migraciones añaden columnas sin eliminar historial, estado de sincronización, equipos ni credenciales. Los CSV conservan el orden anterior y añaden `sim_o_linea`, `cuenta_telefonica_id` y `cuenta_telefonica_componente` al final.
+
+Para actualizar sin volver a vincular: instalar primero servidor 1.2.0 y después APK 1.2.0 encima del anterior con la misma firma; abrir la app, conceder el permiso de nombres si se desea y pulsar **Actualizar → Sincronizar**. Se vuelve a consultar el historial y se reenvían las llamadas cuyos datos de línea se completaron. Las llamadas que ya no estén en el historial Android conservan sus datos previos; no se inventa su SIM. No desinstalar la app ni generar nuevos QR para esta actualización.
 
 Tipos: 1 entrante, 2 saliente, 3 perdida, 4 buzón de voz, 5 rechazada, 6 bloqueada, 7 contestada en otro equipo. `presentation` conserva el valor de Android (1–5). No se admiten campos extras. Un lote inválido se rechaza completo. La app marca registros enviados únicamente con `204` y solo si no han cambiado mientras estaban en tránsito. Errores o reintentos conservan los pendientes.
 
@@ -200,6 +207,8 @@ Validar en cada modelo de teléfono: una llamada entrante, saliente, perdida y r
 Verificación realizada el **30/10/2026**: APK debug compilado, pruebas Kotlin y Lint sin errores. Las pruebas HTTP cubren también el panel, la paginación, migración de la base, aislamiento de comandos, confirmaciones y respuesta del canal remoto. El servidor Docker preservó los 19 registros existentes tras actualizar. Se verificaron filtro, solicitud y ambos CSV desde el navegador con datos ficticios. Una solicitud real por HTTPS se completó en **0,756 segundos**, con la actividad Android cerrada y Doze forzado en un emulador Android 14 con excepción de batería. La velocidad y continuidad del modo remoto deben validarse en el teléfono físico.
 
 La entrega **1.1.0** añade quince pruebas de servidor/configuración, instalación y ciclo de vida real de los servicios en Windows Server 2022 y cinco pruebas instrumentadas Android, incluyendo QR y TLS por servidor. Detalles y límites de verificación en [WINDOWS.md](WINDOWS.md#verificación-de-esta-entrega).
+
+Verificación **1.2.0, 04/11/2026**: 22 pruebas de servidor/configuración, pruebas JavaScript del panel, cuatro pruebas Kotlin y Lint sin errores. En Android 14 se verificaron seis pruebas de importación, migración Room e interfaz y dos de QR/TLS, incluido el envío real de dos cuentas distintas del mismo teléfono por HTTPS. Se comprobó el panel en escritorio y móvil con datos ficticios y el CSV filtrado. El APK genérico conserva el certificado de firma del APK público 1.1.0 y no incluye una CA local. Falta validar llamadas con dos SIM en teléfonos físicos; dos escenarios anteriores de Wi-Fi/control remoto no se repitieron en esta entrega.
 
 ## Restricciones y protección de datos
 

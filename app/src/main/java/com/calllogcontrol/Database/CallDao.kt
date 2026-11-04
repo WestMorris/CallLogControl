@@ -27,7 +27,16 @@ abstract class CallDao {
     open suspend fun merge(records: List<CallRecord>) {
         records.forEach { record ->
             val previous = find(record.id)
-            if (previous == null || previous.copy(synced = false) != record) put(record)
+            val current = when {
+                previous == null -> record
+                record.phoneAccountId.isEmpty() && record.phoneAccountComponentName.isEmpty() -> record.copy(
+                    phoneAccountId = previous.phoneAccountId, phoneAccountComponentName = previous.phoneAccountComponentName,
+                    lineLabel = previous.lineLabel)
+                record.phoneAccountId == previous.phoneAccountId && record.phoneAccountComponentName == previous.phoneAccountComponentName &&
+                    record.lineLabel.isEmpty() -> record.copy(lineLabel = previous.lineLabel)
+                else -> record
+            }
+            if (previous == null || previous.copy(synced = false) != current) put(current)
         }
     }
 
@@ -35,12 +44,15 @@ abstract class CallDao {
     abstract suspend fun pending(): List<CallRecord>
 
     @Query("""UPDATE calls SET synced=1 WHERE id=:id AND number=:number AND type=:type
-        AND durationSeconds=:duration AND presentation=:presentation""")
-    abstract suspend fun acknowledge(id: String, number: String, type: Int, duration: Long, presentation: Int)
+        AND durationSeconds=:duration AND presentation=:presentation
+        AND phoneAccountId=:phoneAccountId AND phoneAccountComponentName=:phoneAccountComponentName AND lineLabel=:lineLabel""")
+    abstract suspend fun acknowledge(id: String, number: String, type: Int, duration: Long, presentation: Int,
+        phoneAccountId: String, phoneAccountComponentName: String, lineLabel: String)
 
     @Transaction
     open suspend fun acknowledge(records: List<CallRecord>) {
-        records.forEach { acknowledge(it.id, it.number, it.type, it.durationSeconds, it.presentation) }
+        records.forEach { acknowledge(it.id, it.number, it.type, it.durationSeconds, it.presentation,
+            it.phoneAccountId, it.phoneAccountComponentName, it.lineLabel) }
     }
 
     @Query("UPDATE calls SET synced=0")

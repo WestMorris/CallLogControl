@@ -13,7 +13,7 @@ from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from server import MAX_BODY, Server, Store
+from server import MAX_BODY, Server, Store, token_hash
 
 
 class ServerTest(unittest.TestCase):
@@ -60,6 +60,44 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["duration_seconds"], 90)
 
+    def test_line_metadata_is_per_call_and_old_retries_preserve_it(self):
+        first = dict(self.call, phone_account_id="account-1",
+                     phone_account_component_name="telephony/ConnectionService", line_label="Personal")
+        second = dict(first, id="2-1000", phone_account_id="account-2", line_label="Trabajo")
+        self.assertEqual(self.send(self.a, [first, second])[0], 204)
+        self.assertEqual(self.send(self.a, [dict(self.call, duration_seconds=90)])[0], 204)
+        data = json.loads(self.request("/v1/calls", self.admin)[1])
+        calls = {call["id"]: call for call in data["calls"]}
+        self.assertEqual(data["total"], 2)
+        self.assertEqual(calls[first["id"]]["duration_seconds"], 90)
+        self.assertEqual(calls[first["id"]]["phone_account_id"], "account-1")
+        self.assertEqual(calls[first["id"]]["phone_account_component_name"], "telephony/ConnectionService")
+        self.assertEqual(calls[first["id"]]["line_label"], "Personal")
+        self.assertEqual(calls[second["id"]]["phone_account_id"], "account-2")
+        self.assertEqual(calls[second["id"]]["line_label"], "Trabajo")
+        self.assertEqual(self.send(self.a, [dict(self.call, line_label="")])[0], 204)
+        with self.store.connect() as db:
+            row = db.execute("SELECT * FROM calls WHERE id=?", (first["id"],)).fetchone()
+        self.assertEqual(row["line_label"], "")
+        self.assertEqual(row["phone_account_id"], "account-1")
+        self.assertEqual(row["phone_account_component_name"], "telephony/ConnectionService")
+
+    def test_optional_line_fields_are_validated_and_default_to_empty(self):
+        fields = ("phone_account_id", "phone_account_component_name", "line_label")
+        for field in fields:
+            for value in [None, True, 1, [], "a" * 257]:
+                with self.subTest(field=field, value=value):
+                    invalid = dict(self.call, id="invalid", **{field: value})
+                    self.assertEqual(self.send(self.a, [self.call, invalid])[0], 400)
+        with self.store.connect() as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM calls").fetchone()[0], 0)
+        maximum = dict(self.call, id="maximum", **{field: "a" * 256 for field in fields})
+        self.assertEqual(self.send(self.a, [self.call, maximum])[0], 204)
+        calls = {call["id"]: call for call in json.loads(self.request("/v1/calls", self.admin)[1])["calls"]}
+        for field in fields:
+            self.assertEqual(calls[self.call["id"]][field], "")
+            self.assertEqual(calls["maximum"][field], "a" * 256)
+
     def test_credentials_and_device_isolation(self):
         self.assertEqual(self.request("/v1/calls", "wrong", {"calls": [self.call]})[0], 401)
         self.assertEqual(self.request("/v1/export.csv", self.a["token"])[0], 401)
@@ -91,11 +129,11 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(len(rows), 3)
         self.assertTrue(all(row[3].startswith("'") for row in rows[1:]))
         self.assertIn("'=Equipo B", [row[1] for row in rows[1:]])
-        self.assertEqual(rows[0][-2:], ["inicio", "zona_horaria_inicio"])
+        self.assertEqual(rows[0][8:10], ["inicio", "zona_horaria_inicio"])
         for row in rows[1:]:
-            self.assertRegex(row[-2], r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$")
-            self.assertRegex(row[-1], r"^UTC[+-]\d{2}:\d{2}$")
-            started = datetime.fromisoformat(row[-2] + row[-1][3:])
+            self.assertRegex(row[8], r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$")
+            self.assertRegex(row[9], r"^UTC[+-]\d{2}:\d{2}$")
+            started = datetime.fromisoformat(row[8] + row[9][3:])
             self.assertEqual(int(started.timestamp() * 1000), int(row[5]))
         status, body = self.request("/v1/export.csv?device_id=" + self.a["device_id"], self.admin)
         rows = list(csv.reader(io.StringIO(body.decode("utf-8-sig"))))
@@ -104,6 +142,31 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(rows[1][0], self.a["device_id"])
         self.assertEqual(self.request("/v1/export.csv?device_id=unknown", self.admin)[0], 404)
         self.assertEqual(self.request("/v1/export.csv?device_id=a&device_id=b", self.admin)[0], 400)
+
+    def test_csv_appends_line_identity_and_neutralizes_its_formulas(self):
+        calls = [dict(self.call, id="both", phone_account_id="account-1", line_label="Trabajo"),
+                 dict(self.call, id="id", phone_account_id="account-2"),
+                 dict(self.call, id="label", line_label="Personal"),
+                 dict(self.call, id="legacy"),
+                 dict(self.call, id="formula", phone_account_id="+1+1", line_label=" \t=1+1",
+                      phone_account_component_name="@SUM(1)")]
+        self.assertEqual(self.send(self.a, calls)[0], 204)
+        status, body = self.request("/v1/export.csv", self.admin)
+        self.assertEqual(status, 200)
+        reader = csv.DictReader(io.StringIO(body.decode("utf-8-sig")))
+        rows = {row["llamada_id"]: row for row in reader}
+        self.assertEqual(reader.fieldnames, ["equipo_id", "equipo", "llamada_id", "numero", "tipo",
+                         "inicio_unix_ms", "duracion_segundos", "presentacion", "inicio", "zona_horaria_inicio",
+                         "sim_o_linea", "cuenta_telefonica_id", "cuenta_telefonica_componente"])
+        self.assertEqual(rows["both"]["sim_o_linea"], "Trabajo (account-1)")
+        self.assertEqual(rows["both"]["cuenta_telefonica_id"], "account-1")
+        self.assertEqual(rows["id"]["sim_o_linea"], "account-2")
+        self.assertEqual(rows["label"]["sim_o_linea"], "Personal")
+        self.assertEqual(rows["legacy"]["sim_o_linea"], "No disponible")
+        self.assertEqual(rows["legacy"]["cuenta_telefonica_id"], "")
+        self.assertEqual(rows["formula"]["sim_o_linea"], "' \t=1+1 (+1+1)")
+        self.assertEqual(rows["formula"]["cuenta_telefonica_id"], "'+1+1")
+        self.assertEqual(rows["formula"]["cuenta_telefonica_componente"], "'@SUM(1)")
 
     def test_limits_and_health(self):
         self.assertEqual(self.send(self.a, [])[0], 400)
@@ -188,6 +251,26 @@ class ServerTest(unittest.TestCase):
         for query in ["offset=-1", "offset=99999999999999", "offset=x", "unknown=1", "offset=1&offset=2"]:
             self.assertEqual(self.request("/v1/calls?" + query, self.admin)[0], 400)
 
+    def test_page_size_and_offset_return_every_call_once(self):
+        self.assertEqual(self.send(self.a, [dict(self.call, id=str(i), started_at=i) for i in range(130)])[0], 204)
+        for limit in [25, 100]:
+            received = []
+            for offset in range(0, 130, limit):
+                status, body = self.request(f"/v1/calls?limit={limit}&offset={offset}", self.admin)
+                self.assertEqual(status, 200)
+                page = json.loads(body)
+                self.assertEqual(page["total"], 130)
+                self.assertEqual(len(page["calls"]), min(limit, 130 - offset))
+                self.assertEqual(page["has_more"], offset + limit < 130)
+                received.extend(call["id"] for call in page["calls"])
+            self.assertEqual(received, [str(i) for i in reversed(range(130))])
+        for query in ["limit=", "limit=0", "limit=-1", "limit=201", "limit=x", "limit=1.5", "limit=25&limit=50"]:
+            self.assertEqual(self.request("/v1/calls?" + query, self.admin)[0], 400)
+        for limit in [1, 200]:
+            self.assertEqual(self.request(f"/v1/calls?limit={limit}", self.admin)[0], 200)
+        rows = list(csv.DictReader(io.StringIO(self.request("/v1/export.csv", self.admin)[1].decode("utf-8-sig"))))
+        self.assertEqual(len(rows), 130)
+
     def test_date_range_is_shared_by_pagination_and_csv(self):
         start, end = 1793750400000, 1793836800000
         calls = [dict(self.call, id=str(i), started_at=start + i) for i in range(55)]
@@ -249,13 +332,26 @@ class ServerTest(unittest.TestCase):
                     started_at INTEGER NOT NULL,duration_seconds INTEGER NOT NULL,presentation INTEGER NOT NULL,PRIMARY KEY(device_id,id));
                 INSERT INTO calls VALUES ('existing','1','123',2,1000,30,1);
             """)
+            db.execute("UPDATE devices SET token_hash=?", (token_hash("existing-token"),))
+            db.commit()
             db.close()
             migrated = Store(directory)
             Store(directory)
+            self.assertEqual(migrated.device_for("existing-token"), "existing")
             with migrated.connect() as db:
-                self.assertEqual(db.execute("SELECT COUNT(*) FROM calls").fetchone()[0], 1)
+                calls = [dict(row) for row in db.execute("SELECT * FROM calls")]
+                self.assertEqual(calls, [{"device_id": "existing", "id": "1", "number": "123", "type": 2,
+                                 "started_at": 1000, "duration_seconds": 30, "presentation": 1,
+                                 "phone_account_id": "", "phone_account_component_name": "", "line_label": ""}])
                 self.assertEqual(db.execute("SELECT name FROM devices").fetchone()[0], "Equipo existente")
                 self.assertIsNone(db.execute("SELECT sync_requested_id FROM devices").fetchone()[0])
+            updated = dict(self.call, id="1", phone_account_id="account-1", line_label="Trabajo")
+            migrated.ingest("existing", {"calls": [updated]})
+            reopened = Store(directory)
+            self.assertEqual(reopened.device_for("existing-token"), "existing")
+            with reopened.connect() as db:
+                self.assertEqual(db.execute("SELECT phone_account_id,line_label FROM calls").fetchone()[:],
+                                 ("account-1", "Trabajo"))
 
     def test_qr_enrollment_requires_admin_and_configured_tls(self):
         route = "/v1/enrollments"

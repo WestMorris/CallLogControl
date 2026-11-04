@@ -8,6 +8,7 @@ import android.provider.MediaStore
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
+import android.widget.TextView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -26,7 +27,8 @@ class MainActivityTest {
         val prefs = context.getSharedPreferences("security", 0)
         prefs.edit().clear().commit()
         val dao = CallDatabase.get(context).calls()
-        val record = CallRecord("ui-test-1000", "+595991123456", 2, 1793361600000, 87, 1)
+        val record = CallRecord("ui-test-1000", "+595991123456", 2, 1793361600000, 87, 1,
+            phoneAccountId = "account-2", lineLabel = "SIM 2")
         runBlocking { dao.put(record) }
         try {
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
@@ -49,9 +51,20 @@ class MainActivityTest {
                     if (!unlocked) Thread.sleep(50)
                 }
                 assertTrue("Password creation must open the dashboard", unlocked)
+                var recordPosition = -1
+                scenario.onActivity { activity ->
+                    val list = activity.findViewById<RecyclerView>(R.id.calls)
+                    val records = list.adapter as androidx.recyclerview.widget.ListAdapter<CallRecord, *>
+                    recordPosition = records.currentList.indexOfFirst { it.id == record.id }
+                    assertTrue("The test call must be visible in recent history", recordPosition >= 0)
+                    list.scrollToPosition(recordPosition)
+                }
                 InstrumentationRegistry.getInstrumentation().waitForIdleSync()
                 scenario.onActivity { activity ->
                     assertEquals(View.GONE, activity.findViewById<View>(R.id.loginPanel).visibility)
+                    val list = activity.findViewById<RecyclerView>(R.id.calls)
+                    val row = requireNotNull(list.findViewHolderForAdapterPosition(recordPosition)).itemView
+                    assertEquals("SIM / línea: SIM 2 (account-2)", row.findViewById<TextView>(R.id.line).text.toString())
                     capture(activity.window.decorView, "dashboard.png")
                 }
                 scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
