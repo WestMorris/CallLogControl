@@ -282,7 +282,7 @@ La app `debug` admite credenciales de prueba de 10 caracteres; `release` exige a
 
 En el propio servidor, abrir **[http://127.0.0.1:8088](http://127.0.0.1:8088)**. Introducir el valor `CALLLOG_ADMIN_TOKEN` de `.env.wifi`, sin el nombre de la variable. La credencial del teléfono no sirve para administrar.
 
-El panel muestra equipos, cantidad de llamadas, último contacto, última sincronización, solicitudes y el historial paginado. Permite seleccionar un equipo y descargar su CSV, o descargar el CSV conjunto. Se actualiza cada cinco segundos. Al recargar o salir se pierde la sesión: la clave se mantiene solo en memoria del navegador.
+El panel muestra equipos, cantidad de llamadas, último contacto, última sincronización, solicitudes y el historial paginado. Permite seleccionar un equipo y filtrar con **Desde / Hasta → Aplicar**; ambos días se incluyen según la zona horaria del navegador. **Limpiar** quita las fechas. **CSV de la vista** descarga todos los registros que coincidan con equipo y fechas, aunque haya varias páginas. **CSV conjunto** y el botón **CSV** de cada equipo descargan el historial completo, sin el filtro de fechas. Se actualiza cada cinco segundos. Al recargar o salir se pierde la sesión: la clave se mantiene solo en memoria del navegador.
 
 La dirección `127.0.0.1` es del equipo donde se abre el navegador: no permite acceder al PC desde el teléfono. Para el panel en otro PC se puede usar `https://IP_DEL_SERVIDOR:8443`, configurando correctamente la confianza de su autoridad local en ese navegador. No enviar la clave administrativa a través de HTTP por la LAN.
 
@@ -324,6 +324,8 @@ curl --fail -H "Authorization: Bearer ${CALLLOG_ADMIN_TOKEN}" \
 ```
 
 Abrir los CSV con Excel, LibreOffice o Numbers. Contienen UTF-8 con BOM; `equipo_id` y `equipo` identifican el origen de cada fila. Si Excel muestra todo en una columna, importar **Desde texto/CSV** seleccionando UTF-8 y separador coma. Los archivos se actualizan al volver a descargarlos. Un CSV individual puede tener solo cabecera si todavía no llegaron llamadas; el conjunto incluye todos los equipos, también los de prueba existentes.
+
+La columna **`inicio`** contiene una fecha legible en formato **año-mes-día hora:minuto:segundo**, por ejemplo `2026-11-04 09:30:00`. **`zona_horaria_inicio`** indica su desplazamiento UTC. Se usa la zona horaria del servidor; comprobar la configuración de Windows. La columna antigua `inicio_unix_ms` conserva el valor técnico original y no debe interpretarse como fecha de Excel. Si la detección regional de Excel deja `inicio` como texto, importar esa columna como fecha/hora con orden año-mes-día ([guía de importación de Microsoft](https://support.microsoft.com/en-us/excel/get-started/import-or-export-text-txt-or-csv-files)).
 
 ## Solicitar sincronización con la app cerrada
 

@@ -37,6 +37,30 @@ try {
     Start-Sleep -Seconds 12
     Check-Services
     Verify-Existing
+    & (Join-Path $PSScriptRoot 'Update-Server.ps1')
+    Check-Services
+    Verify-Existing
+    if ((Get-FileHash (Join-Path $dataDir 'config.json')).Hash -ne $configBefore.Hash) { throw 'Cambio la configuracion con el actualizador del servidor.' }
+    if ((Get-FileHash (Join-Path $dataDir 'caddy\pki\authorities\local\root.crt')).Hash -ne $caBefore.Hash) { throw 'Cambio la autoridad con el actualizador del servidor.' }
+    if (-not (Get-ChildItem (Join-Path $dataDir 'backups') -Filter 'calls.sqlite3' -Recurse)) { throw 'El actualizador no respaldo SQLite.' }
+    $broken = Join-Path $env:TEMP ('calllog-broken-update-' + [guid]::NewGuid().ToString('N'))
+    $codeBefore = Get-FileHash (Join-Path $installDir 'server\server.py')
+    try {
+        New-Item -ItemType Directory -Path (Join-Path $broken 'windows') -Force | Out-Null
+        Copy-Item (Join-Path $installDir 'server') (Join-Path $broken 'server') -Recurse
+        Copy-Item (Join-Path $PSScriptRoot 'Update-Server.ps1') (Join-Path $broken 'windows')
+        [IO.File]::WriteAllText((Join-Path $broken 'server\server.py'), "raise RuntimeError('Windows rollback test')`n", [Text.UTF8Encoding]::new($false))
+        $rejected = $false
+        try { & (Join-Path $broken 'windows\Update-Server.ps1') } catch { $rejected = $true }
+        if (-not $rejected) { throw 'El actualizador acepto un servidor que falla al arrancar.' }
+        Check-Services
+        Verify-Existing
+        if ((Get-FileHash (Join-Path $installDir 'server\server.py')).Hash -ne $codeBefore.Hash) { throw 'No se recupero el codigo anterior.' }
+        if ((Get-FileHash (Join-Path $dataDir 'config.json')).Hash -ne $configBefore.Hash) { throw 'Cambio la configuracion durante rollback.' }
+        if ((Get-FileHash (Join-Path $dataDir 'caddy\pki\authorities\local\root.crt')).Hash -ne $caBefore.Hash) { throw 'Cambio la autoridad durante rollback.' }
+    } finally {
+        Remove-Item -LiteralPath $broken -Recurse -Force
+    }
     Install-Server
     Check-Services
     Verify-Existing

@@ -4,7 +4,7 @@ App Android en Kotlin y microservicio para registrar el historial de llamadas de
 
 **Instalar en Windows, macOS o Linux por Wi-Fi:** ver [WIFI.md](WIFI.md). Incluye una guía de PowerShell para **Windows sin Docker**, alternativas con Docker, HTTPS local, firewall, compilación del APK y CSV individual y conjunto. El servidor nativo solo necesita Python 3.11+ y Caddy 2; no requiere virtualización.
 
-**Windows con asistente:** descargar el `.exe` y el APK genérico de [la versión 1.1.0](https://github.com/WestMorris/CallLogControl/releases/tag/v1.1.0) y seguir [WINDOWS.md](WINDOWS.md). El instalador incluye Python y Caddy, configura servicios y firewall y conserva los datos al actualizar. El alta por QR evita escribir URL o tokens y compilar un APK por servidor.
+**Windows con asistente:** descargar el instalador o el ZIP de actualización del servidor de [la versión 1.1.1](https://github.com/WestMorris/CallLogControl/releases/tag/v1.1.1) y seguir [WINDOWS.md](WINDOWS.md). Los teléfonos existentes conservan la app y su vinculación. Para teléfonos nuevos se mantiene el [APK genérico 1.1.0](https://github.com/WestMorris/CallLogControl/releases/download/v1.1.0/CallLogControl-Android-1.1.0.apk). El instalador incluye Python y Caddy, configura servicios y firewall y conserva los datos al actualizar. El alta por QR evita escribir URL o tokens y compilar un APK por servidor.
 
 ## Qué incluye
 
@@ -13,7 +13,7 @@ App Android en Kotlin y microservicio para registrar el historial de llamadas de
 - Autorización explícita antes de importar las llamadas existentes y futuras. La captura continúa con la pantalla de la app bloqueada mientras conserva el permiso.
 - `CallReceiver.kt` programa una importación al terminar la llamada. WorkManager vuelve a consultar el historial aproximadamente cada 15 minutos y al abrir la app desbloqueada.
 - `CallService.kt` hace una importación manual breve con notificación visible. No mantiene un servicio permanente.
-- Panel administrativo local: equipos, llamadas paginadas, filtro por equipo, CSV y solicitudes remotas. Ver [WIFI.md](WIFI.md).
+- Panel administrativo local: equipos, llamadas paginadas, filtros por equipo y fechas, CSV y solicitudes remotas. Ver [WIFI.md](WIFI.md).
 - Alta desde el panel con nombre y QR de un solo uso, válido cinco minutos. La app 1.1.0 escanea con cámara y configura la URL, la credencial del teléfono y una autoridad TLS limitada a ese servidor, sin instalar certificados en Android.
 - `RemoteSyncService.kt` ofrece un modo opcional de control remoto inmediato por Wi-Fi, con servicio visible, notificación permanente y mayor consumo de batería. Debe activarse en la app y permitir batería sin restricciones.
 - Pantalla de las últimas 200 llamadas, totales globales y pendientes. CSV local con **todos** los registros, guardado mediante el selector de archivos de Android.
@@ -136,7 +136,7 @@ curl --fail-with-body -H "Authorization: Bearer $CALLLOG_ADMIN_TOKEN" \
   "$CALLLOG_URL/v1/export.csv?device_id=ID_DEL_EQUIPO" -o llamadas-equipo.csv
 ```
 
-El CSV del servidor contiene `equipo_id`, `equipo`, `llamada_id`, `numero`, `tipo`, `inicio_unix_ms` (UTC Unix en milisegundos), `duracion_segundos` y `presentacion`. Usa UTF-8 con BOM y escape de comillas. Los valores que podrían convertirse en fórmulas de Excel reciben un apóstrofo inicial, incluidos los números telefónicos con `+`.
+El CSV del servidor conserva `equipo_id`, `equipo`, `llamada_id`, `numero`, `tipo`, `inicio_unix_ms` (UTC Unix en milisegundos), `duracion_segundos` y `presentacion`. Añade `inicio`, una fecha legible como **2026-11-04 09:30:00** (año-mes-día, hora de 24 horas), y `zona_horaria_inicio`, por ejemplo **UTC-03:00**. Para trabajar con fechas en Excel, usar `inicio`; `inicio_unix_ms` se conserva para compatibilidad. La conversión usa la zona horaria del servidor: comprobar que Windows tenga configurada la zona correcta antes de exportar. Usa UTF-8 con BOM y escape de comillas. Los valores que podrían convertirse en fórmulas de Excel reciben un apóstrofo inicial, incluidos los números telefónicos con `+`.
 
 ## Contrato HTTP
 
@@ -153,6 +153,8 @@ El CSV del servidor contiene `equipo_id`, `equipo`, `llamada_id`, `numero`, `tip
 | `POST /v1/sync-ack` | Equipo activo | Confirma `{"request_id":"UUID"}` después de importar y enviar todos los pendientes |
 | `GET /v1/export.csv` | Administrador | CSV de todos los equipos |
 | `GET /v1/export.csv?device_id=...` | Administrador | CSV del equipo, o `404` |
+
+`GET /v1/calls` y `GET /v1/export.csv` aceptan también `started_from` (inicio inclusivo) y `started_before` (fin exclusivo), ambos Unix en milisegundos y combinables con `device_id`. El conteo, la paginación y el CSV aplican el mismo rango; el CSV exporta todas las páginas. En el panel, **Desde / Hasta → Aplicar** incluye ambos días según la zona horaria del navegador. **CSV de la vista** respeta esos filtros; **CSV conjunto** y el CSV de la fila de un equipo exportan su historial completo.
 
 Credenciales en `Authorization: Bearer TOKEN`. Ingreso con `Content-Type: application/json`:
 
@@ -172,6 +174,8 @@ Credenciales en `Authorization: Bearer TOKEN`. Ingreso con `Content-Type: applic
 ```
 
 `id` combina el ID del proveedor Android y la fecha para evitar colisiones si el proveedor reutiliza IDs. La clave del servidor es `(equipo_id, llamada_id)`. Repetir una llamada actualiza sus datos; no crea otra fila. No se admite enviar un `equipo_id` en el cuerpo ni atribuir llamadas a otro equipo.
+
+**Equipos con dos SIM:** la app consulta el historial completo del perfil Android, sin filtrar por chip. Las llamadas de ambas líneas que Android exponga se reúnen bajo el mismo equipo. Actualmente no se guarda la SIM de origen; no es posible separar líneas ni reconstruir esa información en el servidor. CSV y filtros se pueden actualizar solo en el servidor, conservando los teléfonos vinculados. Identificar la SIM requeriría una actualización posterior de la app; instalar encima con la misma firma permite conservar su configuración.
 
 Tipos: 1 entrante, 2 saliente, 3 perdida, 4 buzón de voz, 5 rechazada, 6 bloqueada, 7 contestada en otro equipo. `presentation` conserva el valor de Android (1–5). No se admiten campos extras. Un lote inválido se rechaza completo. La app marca registros enviados únicamente con `204` y solo si no han cambiado mientras estaban en tránsito. Errores o reintentos conservan los pendientes.
 

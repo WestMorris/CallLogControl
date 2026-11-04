@@ -26,16 +26,24 @@ jobs:
           }
           python -m unittest discover -s server -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node server/test_panel.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build offline installer
         shell: powershell
         run: ./windows/Build-Installer.ps1
+      - name: Package server-only update
+        shell: powershell
+        run: ./windows/Build-ServerUpdate.ps1
       - name: Install and exercise real Windows services
         shell: powershell
-        run: ./windows/Smoke-Test.ps1 -SetupPath "$pwd/build/windows/CallLogControl-Setup-1.1.0-x64.exe"
+        run: ./windows/Smoke-Test.ps1 -SetupPath "$pwd/build/windows/CallLogControl-Setup-1.1.1-x64.exe"
       - name: Publish installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CallLogControl-Windows-1.1.0
-          path: build/windows/CallLogControl-Setup-1.1.0-x64.exe
+          name: CallLogControl-Windows-1.1.1
+          path: |
+            build/windows/CallLogControl-Setup-1.1.1-x64.exe
+            build/windows/CallLogControl-ServerUpdate-1.1.1.zip
+            build/windows/CallLogControl-ServerUpdate-1.1.1.zip.sha256
           if-no-files-found: error
           retention-days: 14

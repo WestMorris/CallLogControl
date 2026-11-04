@@ -24,11 +24,18 @@
         <div class="table-wrap"><table><thead><tr><th>Equipo</th><th>Llamadas</th><th>Último contacto</th><th>Última sincronización</th><th>Solicitud</th><th>Acciones</th></tr></thead><tbody id="devices"></tbody></table></div>
         <p class="note">Para responder en segundos, activa Control remoto en la app y permite batería sin restricciones. Funciona con notificación permanente y mayor consumo. Sin ese modo, el contacto periódico puede tardar 15 minutos o más. El equipo debe poder acceder al servidor por Wi‑Fi.</p>
       </section>
-      <section class="card"><div class="section-head"><div><h2>Historial de llamadas</h2><p id="result-summary">Cargando…</p></div><div class="actions"><label for="device-filter" class="sr-only">Filtrar por equipo</label><select id="device-filter"><option value="">Todos los equipos</option></select><button id="export-selected">CSV de la vista</button><button id="export-all" class="primary">CSV conjunto</button></div></div>
+      <section class="card"><div class="section-head"><div><h2>Historial de llamadas</h2><p id="result-summary">Cargando…</p></div><div class="actions"><button id="export-selected">CSV de la vista</button><button id="export-all" class="primary">CSV conjunto</button></div></div>
+        <form id="date-filter-form" class="filters" aria-describedby="filter-help">
+          <div class="filter-field"><label for="device-filter">Equipo</label><select id="device-filter"><option value="">Todos los equipos</option></select></div>
+          <div class="filter-field"><label for="date-from">Desde</label><input id="date-from" type="date" min="1970-01-01" max="2099-12-31"></div>
+          <div class="filter-field"><label for="date-until">Hasta</label><input id="date-until" type="date" min="1970-01-01" max="2099-12-31"></div>
+          <button type="submit">Aplicar fechas</button><button id="clear-dates" type="button">Limpiar fechas</button>
+        </form>
+        <p id="filter-help" class="note filter-help">Hasta incluye todo el día. CSV de la vista exporta todos los registros del equipo y las fechas aplicadas. CSV conjunto y los botones CSV de cada equipo exportan su historial completo, sin filtro de fechas.</p>
         <div class="table-wrap"><table><thead><tr><th>Equipo</th><th>Número</th><th>Tipo</th><th>Inicio</th><th>Duración</th></tr></thead><tbody id="calls"></tbody></table></div>
         <div class="pagination"><button id="previous">Anterior</button><span id="page-info"></span><button id="next">Siguiente</button></div>
       </section>
-      <p class="note">Los equipos con prefijo [PRUEBA] contienen datos ficticios y también aparecen en el CSV conjunto. Las fechas se muestran en la zona horaria de este navegador.</p>
+      <p class="note">Los equipos con prefijo [PRUEBA] contienen datos ficticios y también aparecen en el CSV conjunto. Las fechas y los filtros del panel usan la zona horaria de este navegador; el CSV usa la del servidor e incluye su desplazamiento UTC.</p>
     </div>
     <p id="message" role="status" aria-live="polite"></p>
     <dialog id="enrollment-dialog" aria-labelledby="enrollment-title"><h2 id="enrollment-title">Alta del teléfono</h2><p id="enrollment-info"></p><img id="enrollment-qr" alt="Código QR de alta, privado y de un solo uso"><p class="note">En la app desbloqueada pulsa «Vincular por QR». Escanea únicamente el QR del servidor de tu empresa. No compartas este código.</p><button id="enrollment-close">Cerrar</button></dialog>

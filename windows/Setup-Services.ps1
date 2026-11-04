@@ -43,6 +43,11 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'No se pudieron proteger los archivos existentes con permisos NTFS.' }
     }
     New-Item -ItemType Directory -Force (Join-Path $dataDir 'logs') | Out-Null
+    $configPath = Join-Path $dataDir 'config.json'
+    if ($LanIP -eq 'auto' -and (Test-Path $configPath)) {
+        # Updating must keep the address already saved on the phones.
+        $LanIP = (Get-Content -Raw $configPath | ConvertFrom-Json).lan_ip
+    }
     if ($LanIP -eq 'auto') {
         $network = Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -and $_.IPv4Address } | Sort-Object { $_.NetIPv4Interface.InterfaceMetric } | Select-Object -First 1
         if (-not $network) { throw 'No se detecto una interfaz IPv4 con puerta de enlace. Conecta el Wi-Fi o indica la IP en el instalador.' }

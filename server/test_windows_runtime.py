@@ -14,11 +14,24 @@ class WindowsRuntimeTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             first = runtime.configure(root, '192.168.1.100')
-            device = runtime.Store(root / 'data').register('Ventas')
+            store = runtime.Store(root / 'data')
+            devices = [store.register(name) for name in ['Ventas', 'Soporte', 'Dos líneas']]
+            call = {'id': '1', 'number': '+595990000001', 'type': 2,
+                    'started_at': 1793361600000, 'duration_seconds': 10, 'presentation': 1}
+            for device in devices:
+                store.ingest(device['device_id'], {'calls': [call]})
+            ca = root / 'caddy/pki/authorities/local/root.crt'
+            ca.parent.mkdir(parents=True)
+            ca.write_bytes(b'existing CA')
+            runtime.configure(root, first['lan_ip'])
             second = runtime.configure(root, '192.168.1.101')
             self.assertEqual(first['admin_token'], second['admin_token'])
             self.assertEqual(second['lan_ip'], '192.168.1.101')
-            self.assertEqual(runtime.Store(root / 'data').device_for(device['token']), device['device_id'])
+            for device in devices:
+                self.assertEqual(runtime.Store(root / 'data').device_for(device['token']), device['device_id'])
+            with store.connect() as db:
+                self.assertEqual(db.execute('SELECT COUNT(*) FROM calls').fetchone()[0], 3)
+            self.assertEqual(ca.read_bytes(), b'existing CA')
             self.assertEqual((root / 'admin-key.txt').read_text().strip(), first['admin_token'])
             before = (root / 'config.json').read_bytes()
             for bad in ['not-an-ip', '0.0.0.0', '224.0.0.1', '::1']:

@@ -1,7 +1,8 @@
 "use strict";
 (() => {
   const $ = id => document.getElementById(id);
-  let key = "", timer = null, offset = 0, loading = false;
+  let key = "", timer = null, offset = 0, loading = false, refreshPending = false;
+  let deviceFilter = "", dateFilters = new URLSearchParams();
   let qrUrl = null, qrExpiry = null;
   const date = value => value ? new Date(value).toLocaleString("es", {dateStyle:"short", timeStyle:"short"}) : "Sin dato";
   const types = {1:"Entrante",2:"Saliente",3:"Perdida",4:"Buzón de voz",5:"Rechazada",6:"Bloqueada",7:"Contestada en otro equipo"};
@@ -11,6 +12,8 @@
     key = ""; clearInterval(timer); timer = null;
     $("workspace").hidden = true; $("logout").hidden = true; $("login").hidden = false;
     $("devices").replaceChildren(); $("calls").replaceChildren(); $("device-filter").replaceChildren(new Option("Todos los equipos", ""));
+    deviceFilter = ""; dateFilters = new URLSearchParams();
+    $("date-from").value = ""; $("date-until").value = "";
     $("admin-key").value = "";
   }
   async function api(path, options = {}) {
@@ -32,17 +35,36 @@
     });
     return node;
   }
-  async function download(device = "") {
-    const response = await api("/v1/export.csv" + (device ? `?device_id=${encodeURIComponent(device)}` : ""));
+  function callQuery(device, withDates = true) {
+    const query = new URLSearchParams(withDates ? dateFilters : undefined);
+    if (device) query.set("device_id", device);
+    return query;
+  }
+  function applyDates() {
+    const from = $("date-from").value, until = $("date-until").value;
+    if (from && until && from > until) throw Error("Desde debe ser anterior o igual a Hasta. Corrige las fechas y vuelve a aplicar.");
+    const query = new URLSearchParams();
+    for (const [name, value] of [["started_from", from], ["started_before", until]]) {
+      if (!value) continue;
+      const boundary = new Date(`${value}T00:00:00`);
+      if (name === "started_before") boundary.setDate(boundary.getDate() + 1);
+      if (!Number.isFinite(boundary.getTime())) throw Error("Fecha inválida. Elige una fecha del calendario y vuelve a aplicar.");
+      query.set(name, String(boundary.getTime()));
+    }
+    dateFilters = query; offset = 0;
+  }
+  async function download(device = "", withDates = false) {
+    const query = callQuery(device, withDates);
+    const response = await api(`/v1/export.csv${query.size ? `?${query}` : ""}`);
     const url = URL.createObjectURL(await response.blob());
     const a = document.createElement("a"); a.href = url; a.download = device ? `llamadas-${device}.csv` : "llamadas-todos.csv";
     document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   async function refresh() {
-    if (!key || loading) return;
+    if (!key) return;
+    if (loading) { refreshPending = true; return; }
     loading = true;
     try {
-      const selected = $("device-filter").value;
       const devices = (await (await api("/v1/devices")).json()).devices;
       if (!key) return;
       $("device-count").textContent = devices.length;
@@ -70,11 +92,12 @@
         $("devices").append(row);
       }
       if (!devices.length) { const row = document.createElement("tr"); cell(row,"Todavía no hay equipos registrados.").colSpan = 6; $("devices").append(row); }
-      $("device-filter").value = selected;
-      const query = new URLSearchParams({offset:String(offset)});
-      if ($("device-filter").value) query.set("device_id", $("device-filter").value);
+      $("device-filter").value = deviceFilter;
+      const query = callQuery(deviceFilter);
+      const filters = query.toString(), pageOffset = offset;
+      query.set("offset", String(pageOffset));
       const data = await (await api(`/v1/calls?${query}`)).json();
-      if (!key) return;
+      if (!key || filters !== callQuery(deviceFilter).toString() || pageOffset !== offset) return;
       $("calls").replaceChildren();
       for (const call of data.calls) {
         const row = document.createElement("tr");
@@ -86,7 +109,10 @@
       $("result-summary").textContent = `${data.total} ${data.total === 1 ? "registro recibido" : "registros recibidos"}`;
       $("page-info").textContent = data.total ? `${offset + 1}–${offset + data.calls.length} de ${data.total}` : "0 registros";
       $("previous").disabled = offset === 0; $("next").disabled = !data.has_more;
-    } finally { loading = false; }
+    } finally {
+      loading = false;
+      if (refreshPending) { refreshPending = false; safeRefresh(); }
+    }
   }
   async function safeRefresh() { try { await refresh(); } catch (error) { message(error.message, true); } }
   function clearQr() {
@@ -124,9 +150,18 @@
   });
   $("logout").addEventListener("click", () => { logout(); message(); });
   $("refresh").addEventListener("click", () => { message(); safeRefresh(); });
-  $("device-filter").addEventListener("change", () => { offset = 0; safeRefresh(); });
+  $("device-filter").addEventListener("change", () => { deviceFilter = $("device-filter").value; offset = 0; safeRefresh(); });
+  $("date-filter-form").addEventListener("submit", event => {
+    event.preventDefault();
+    try { applyDates(); message(); safeRefresh(); }
+    catch (error) { message(error.message, true); $("date-from").focus(); }
+  });
+  $("clear-dates").addEventListener("click", () => {
+    $("date-from").value = ""; $("date-until").value = "";
+    applyDates(); message(); safeRefresh();
+  });
   $("previous").addEventListener("click", () => { offset = Math.max(0, offset - 50); safeRefresh(); });
   $("next").addEventListener("click", () => { offset += 50; safeRefresh(); });
-  $("export-selected").addEventListener("click", () => download($("device-filter").value).catch(error => message(error.message, true)));
+  $("export-selected").addEventListener("click", () => download(deviceFilter, true).catch(error => message(error.message, true)));
   $("export-all").addEventListener("click", () => download().catch(error => message(error.message, true)));
 })();

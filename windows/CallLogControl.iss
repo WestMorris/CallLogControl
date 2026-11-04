@@ -4,7 +4,7 @@
 #ifndef OutputDir
   #define OutputDir "..\build\windows"
 #endif
-#define AppVersion "1.1.0"
+#define AppVersion "1.1.1"
 
 [Setup]
 AppId={{75A2046F-B593-46B3-B39E-359BA1229807}
@@ -69,7 +69,7 @@ end;
 procedure InitializeWizard;
 begin
   NetworkPage := CreateInputQueryPage(wpSelectDir, 'Conexion con los telefonos', 'Direccion del servidor en la red local',
-    'Deja auto para detectar la IP de la interfaz principal, o escribe la IPv4 del PC. Los telefonos deben estar en la misma red. No se necesita Docker.');
+    'Deja auto para conservar la IP de una instalacion existente o detectar la IP en la primera instalacion. Para cambiarla, escribe la IPv4 del PC. Los telefonos deben estar en la misma red.');
   NetworkPage.Add('IP del servidor (auto o IPv4):', False);
   NetworkPage.Values[0] := ExpandConstant('{param:LANIP|auto}');
 end;

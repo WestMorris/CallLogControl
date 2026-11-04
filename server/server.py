@@ -3,6 +3,7 @@ import argparse
 import base64
 from contextlib import contextmanager
 import csv
+from datetime import datetime, timezone
 import hashlib
 import hmac
 import io
@@ -34,6 +35,27 @@ def csv_cell(value):
     value = str(value)
     # Excel interprets formulas even when the CSV field is quoted.
     return "'" + value if value.lstrip(" \t\r\n").startswith(("=", "+", "-", "@")) else value
+
+
+def call_filters(params):
+    clauses, values = [], []
+    if "device_id" in params:
+        clauses.append("c.device_id=?")
+        values.append(params["device_id"][0])
+    bounds = {}
+    for name, operator in [("started_from", ">="), ("started_before", "<")]:
+        if name not in params:
+            continue
+        raw = params[name][0]
+        if not re.fullmatch(r"-?[0-9]{1,13}", raw) or not -86400000 <= int(raw) <= 4102531200000:
+            raise ValueError(f"{name} debe ser una fecha Unix en milisegundos válida")
+        bounds[name] = int(raw)
+        clauses.append(f"c.started_at{operator}?")
+        values.append(bounds[name])
+    if ("started_from" in bounds and "started_before" in bounds
+            and bounds["started_from"] >= bounds["started_before"]):
+        raise ValueError("La fecha Desde debe ser anterior al fin del rango")
+    return (" WHERE " + " AND ".join(clauses) if clauses else ""), tuple(values)
 
 
 class Store:
@@ -383,7 +405,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(200, {"devices": [dict(row) for row in rows]})
         if url.path == "/v1/calls":
             params = parse_qs(url.query, keep_blank_values=True)
-            if set(params) - {"device_id", "offset"} or any(len(v) != 1 for v in params.values()):
+            if set(params) - {"device_id", "offset", "started_from", "started_before"} or any(len(v) != 1 for v in params.values()):
                 return self.reply(400, {"error": "Filtros inválidos"})
             try:
                 offset = int(params.get("offset", ["0"])[0])
@@ -391,9 +413,10 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError()
             except ValueError:
                 return self.reply(400, {"error": "offset inválido"})
-            device = params.get("device_id", [None])[0]
-            where = " WHERE c.device_id=?" if device is not None else ""
-            values = (device,) if device is not None else ()
+            try:
+                where, values = call_filters(params)
+            except ValueError as error:
+                return self.reply(400, {"error": str(error)})
             with self.server.store.connect() as db:
                 total = db.execute("SELECT COUNT(*) FROM calls c" + where, values).fetchone()[0]
                 rows = db.execute("""SELECT c.*,d.name AS device_name FROM calls c
@@ -404,16 +427,19 @@ class Handler(BaseHTTPRequestHandler):
         if url.path != "/v1/export.csv":
             return self.reply(404, {"error": "Ruta inexistente"})
         params = parse_qs(url.query, keep_blank_values=True)
-        if set(params) - {"device_id"} or any(len(v) != 1 for v in params.values()):
-            return self.reply(400, {"error": "Usa únicamente device_id, una vez"})
+        if set(params) - {"device_id", "started_from", "started_before"} or any(len(v) != 1 for v in params.values()):
+            return self.reply(400, {"error": "Filtros inválidos"})
+        try:
+            where, values = call_filters(params)
+        except ValueError as error:
+            return self.reply(400, {"error": str(error)})
         device = params.get("device_id", [None])[0]
         with self.server.store.connect() as db:
             if device is not None and not db.execute("SELECT 1 FROM devices WHERE id=?", (device,)).fetchone():
                 return self.reply(404, {"error": "Equipo inexistente"})
             rows = db.execute("""SELECT d.id,d.name,c.id,c.number,c.type,c.started_at,
                 c.duration_seconds,c.presentation FROM calls c JOIN devices d ON d.id=c.device_id"""
-                + (" WHERE d.id=?" if device is not None else "")
-                + " ORDER BY c.started_at DESC,d.id,c.id", (device,) if device is not None else ())
+                + where + " ORDER BY c.started_at DESC,d.id,c.id", values)
             self.send_response(200)
             self.send_header("Content-Type", "text/csv; charset=utf-8")
             self.send_header("Content-Disposition", 'attachment; filename="llamadas.csv"')
@@ -424,13 +450,17 @@ class Handler(BaseHTTPRequestHandler):
             buffer = io.StringIO(newline="")
             writer = csv.writer(buffer)
             writer.writerow(["equipo_id", "equipo", "llamada_id", "numero", "tipo",
-                             "inicio_unix_ms", "duracion_segundos", "presentacion"])
+                             "inicio_unix_ms", "duracion_segundos", "presentacion", "inicio", "zona_horaria_inicio"])
             self.wfile.write(buffer.getvalue().encode())
             for row in rows:
                 buffer.seek(0)
                 buffer.truncate()
                 values = list(row)
                 values[4] = CALL_TYPES[values[4]]
+                started = datetime.fromtimestamp(values[5] / 1000, timezone.utc).astimezone()
+                utc_offset = started.strftime("%z")
+                values.extend([started.strftime("%Y-%m-%d %H:%M:%S"),
+                               f"UTC{utc_offset[:3]}:{utc_offset[3:]}"])
                 writer.writerow([csv_cell(v) for v in values])
                 self.wfile.write(buffer.getvalue().encode())
 

@@ -1,4 +1,5 @@
 import csv
+from datetime import datetime
 import io
 import json
 from concurrent.futures import ThreadPoolExecutor
@@ -90,6 +91,12 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(len(rows), 3)
         self.assertTrue(all(row[3].startswith("'") for row in rows[1:]))
         self.assertIn("'=Equipo B", [row[1] for row in rows[1:]])
+        self.assertEqual(rows[0][-2:], ["inicio", "zona_horaria_inicio"])
+        for row in rows[1:]:
+            self.assertRegex(row[-2], r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$")
+            self.assertRegex(row[-1], r"^UTC[+-]\d{2}:\d{2}$")
+            started = datetime.fromisoformat(row[-2] + row[-1][3:])
+            self.assertEqual(int(started.timestamp() * 1000), int(row[5]))
         status, body = self.request("/v1/export.csv?device_id=" + self.a["device_id"], self.admin)
         rows = list(csv.reader(io.StringIO(body.decode("utf-8-sig"))))
         self.assertEqual(status, 200)
@@ -104,6 +111,17 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(self.request("/v1/calls", self.a["token"], {},
                                      {"Content-Length": str(MAX_BODY + 1)})[0], 413)
         self.assertEqual(self.request("/healthz")[0], 200)
+
+    def test_csv_dates_cover_timestamp_limits_and_keep_milliseconds(self):
+        timestamps = [0, 1793750400123, 4102444800000]
+        self.send(self.a, [dict(self.call, id=str(stamp), started_at=stamp) for stamp in timestamps])
+        status, body = self.request("/v1/export.csv", self.admin)
+        self.assertEqual(status, 200)
+        rows = list(csv.DictReader(io.StringIO(body.decode("utf-8-sig"))))
+        self.assertEqual({int(row["inicio_unix_ms"]) for row in rows}, set(timestamps))
+        for row in rows:
+            started = datetime.fromisoformat(row["inicio"] + row["zona_horaria_inicio"][3:])
+            self.assertEqual(int(started.timestamp()) * 1000, int(row["inicio_unix_ms"]) // 1000 * 1000)
 
     def test_panel_is_public_shell_but_data_and_commands_require_admin(self):
         status, body = self.request("/")
@@ -169,6 +187,51 @@ class ServerTest(unittest.TestCase):
         self.assertFalse({r["id"] for r in page["calls"]} & {r["id"] for r in last["calls"]})
         for query in ["offset=-1", "offset=99999999999999", "offset=x", "unknown=1", "offset=1&offset=2"]:
             self.assertEqual(self.request("/v1/calls?" + query, self.admin)[0], 400)
+
+    def test_date_range_is_shared_by_pagination_and_csv(self):
+        start, end = 1793750400000, 1793836800000
+        calls = [dict(self.call, id=str(i), started_at=start + i) for i in range(55)]
+        calls += [dict(self.call, id="previous", started_at=start - 1),
+                  dict(self.call, id="last", started_at=end - 1),
+                  dict(self.call, id="next", started_at=end)]
+        self.send(self.a, calls)
+        self.send(self.b, [dict(self.call, id="b", started_at=start)])
+        query = f"?started_from={start}&started_before={end}&device_id={self.a['device_id']}"
+        page = json.loads(self.request("/v1/calls" + query, self.admin)[1])
+        last = json.loads(self.request("/v1/calls" + query + "&offset=50", self.admin)[1])
+        self.assertEqual(page["total"], 56)
+        self.assertEqual(len(page["calls"]), 50)
+        self.assertTrue(page["has_more"])
+        self.assertFalse(last["has_more"])
+        expected = {str(i) for i in range(55)} | {"last"}
+        self.assertEqual({c["id"] for c in page["calls"] + last["calls"]}, expected)
+        status, body = self.request("/v1/export.csv" + query, self.admin)
+        self.assertEqual(status, 200)
+        exported = list(csv.DictReader(io.StringIO(body.decode("utf-8-sig"))))
+        self.assertEqual({c["llamada_id"] for c in exported}, expected)
+        for route in ["/v1/calls", "/v1/export.csv"]:
+            for suffix, count in [(f"?started_from={end}", 1),
+                                  (f"?started_before={start}", 1),
+                                  (f"?started_from={end + 1}", 0)]:
+                with self.subTest(route=route, suffix=suffix):
+                    status, body = self.request(route + suffix, self.admin)
+                    self.assertEqual(status, 200)
+                    result = (json.loads(body)["calls"] if route.endswith("calls") else
+                              list(csv.DictReader(io.StringIO(body.decode("utf-8-sig")))))
+                    self.assertEqual(len(result), count)
+
+    def test_invalid_date_filters_are_rejected_for_list_and_csv(self):
+        queries = ["started_from=", "started_before=tomorrow", "started_from=1.5",
+                   "started_from=1e3", "started_before=4102531200001",
+                   "started_from=-86400001", "started_from=1&started_from=2",
+                   "started_before=1&started_before=2", "started_from=2&started_before=1",
+                   "started_from=1&started_before=1", "unknown=1"]
+        for route in ["/v1/calls", "/v1/export.csv"]:
+            for query in queries:
+                with self.subTest(route=route, query=query):
+                    self.assertEqual(self.request(route + "?" + query, self.admin)[0], 400)
+            for query in ["started_from=-86400000", "started_before=4102531200000"]:
+                self.assertEqual(self.request(route + "?" + query, self.admin)[0], 200)
 
     def test_revoked_device_cannot_receive_or_complete_commands(self):
         with self.store.connect() as db:
